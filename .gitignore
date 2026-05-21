@@ -35,7 +35,7 @@ yarn-error.log*
 # package manager
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml: committed for CI reproducibility (sniptex policy from 2026-05-22)
 
 # semantic-release
 .nyc_output
@@ -115,3 +115,8 @@ ocr_prompt.txt
 
 # Git worktrees (local development only)
 worktrees/
+
+# Tauri / Rust build artifacts
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/WixTools/

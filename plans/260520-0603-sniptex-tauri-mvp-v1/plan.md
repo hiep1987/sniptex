@@ -27,7 +27,7 @@ Free alternative to Mathpix Snip ($5-20/mo) for Mac + Windows. Hotkey-triggered 
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Prompt Validation & Go/No-Go](./phase-01-prompt-validation-go-no-go.md) | ✅ Validation Complete (Session 3, Path C) |
-| 2 | [Tauri Scaffold & Rust Foundation](./phase-02-tauri-scaffold-rust-foundation.md) | Pending |
+| 2 | [Tauri Scaffold & Rust Foundation](./phase-02-tauri-scaffold-rust-foundation.md) | In Progress (compile verified, hotkey awaits manual test) |
 | 3 | [Agent System & OCR Pipeline](./phase-03-agent-system-ocr-pipeline.md) | Pending |
 | 4 | [Screen Capture & Region Selector](./phase-04-screen-capture-region-selector.md) | Pending |
 | 5 | [Hotkey & Tray Integration](./phase-05-hotkey-tray-integration.md) | Pending |
