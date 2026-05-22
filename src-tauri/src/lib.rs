@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod capture;
 mod commands;
 pub mod ocr;
 

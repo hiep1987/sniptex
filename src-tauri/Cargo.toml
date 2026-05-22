@@ -5,6 +5,7 @@ description = "Free, open-source, cross-platform OCR snip tool for LaTeX and Mar
 authors = ["SnipTeX contributors"]
 license = "MIT"
 edition = "2021"
+default-run = "sniptex"
 
 [lib]
 name = "sniptex_lib"
@@ -14,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "=2.6.2", features = [] }
 
 [dependencies]
-tauri = { version = "=2.11.2", features = [] }
+tauri = { version = "=2.11.2", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-clipboard-manager = "=2.3.2"
 tauri-plugin-dialog = "=2.7.1"
 tauri-plugin-notification = "=2.3.3"
@@ -33,6 +34,10 @@ dirs = "5"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 base64 = "0.22"
 keyring = "3"
+
+# Phase 4: screen capture + region selector
+xcap = "0.9"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

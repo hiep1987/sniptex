@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -20,10 +21,35 @@
         "minHeight": 480,
         "resizable": true,
         "fullscreen": false
+      },
+      {
+        "label": "overlay",
+        "title": "SnipTeX Capture",
+        "url": "index.html",
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": true,
+        "shadow": false,
+        "acceptFirstMouse": true,
+        "width": 800,
+        "height": 600,
+        "x": 0,
+        "y": 0
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["$TEMP/sniptex/**"],
+          "deny": []
+        }
+      }
     }
   },
   "bundle": {

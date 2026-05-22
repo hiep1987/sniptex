@@ -29,7 +29,7 @@ Free alternative to Mathpix Snip ($5-20/mo) for Mac + Windows. Hotkey-triggered 
 | 1 | [Prompt Validation & Go/No-Go](./phase-01-prompt-validation-go-no-go.md) | ✅ Validation Complete (Session 3, Path C) |
 | 2 | [Tauri Scaffold & Rust Foundation](./phase-02-tauri-scaffold-rust-foundation.md) | ✅ Complete (hotkey verified 2026-05-22) |
 | 3 | [Agent System & OCR Pipeline](./phase-03-agent-system-ocr-pipeline.md) | ✅ Complete (2026-05-22) |
-| 4 | [Screen Capture & Region Selector](./phase-04-screen-capture-region-selector.md) | Pending |
+| 4 | [Screen Capture & Region Selector](./phase-04-screen-capture-region-selector.md) | ✅ Complete (2026-05-22, smoke test verified) |
 | 5 | [Hotkey & Tray Integration](./phase-05-hotkey-tray-integration.md) | Pending |
 | 6 | [React UI Shell & MathJax Preview](./phase-06-react-ui-shell-mathjax-preview.md) | Pending |
 | 7 | [SQLite History with FTS5 Search](./phase-07-sqlite-history-with-fts5-search.md) | Pending |

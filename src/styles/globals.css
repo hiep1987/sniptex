@@ -25,3 +25,15 @@ body {
     color: #e2e8f0;
   }
 }
+
+/* Overlay window must be fully transparent so the captured backdrop
+   image (rendered inside React) is the only opaque content. */
+html.overlay-window,
+body.overlay-window,
+body.overlay-window #root {
+  background: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
