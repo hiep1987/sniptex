@@ -8,7 +8,8 @@ mod state;
 mod tray;
 
 use commands::{
-    delete_api_key, detect_agents, has_api_key, hello, run_snip, set_api_key, test_agent,
+    delete_api_key, detect_agents, has_api_key, hello, hide_window, run_snip, set_api_key,
+    show_window, test_agent,
 };
 
 #[cfg(desktop)]
@@ -37,8 +38,13 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 app.manage(state::AppState::new());
+
                 tray::init_tray(app.handle())?;
                 hotkey::verify_registration(app.handle());
+
+                // (Don't auto-open Preview DevTools — on macOS that
+                // force-shows the hidden window. Right-click any
+                // visible Preview after a snip to inspect.)
             }
             Ok(())
         })
@@ -49,7 +55,9 @@ pub fn run() {
             set_api_key,
             has_api_key,
             delete_api_key,
-            run_snip
+            run_snip,
+            show_window,
+            hide_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running SnipTeX");

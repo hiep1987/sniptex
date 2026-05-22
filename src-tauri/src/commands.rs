@@ -44,6 +44,30 @@ pub fn hello(name: Option<String>) -> HelloReply {
     }
 }
 
+/// Show a Tauri window by label and bring it to focus. Used by tray
+/// menu items and onboarding/settings cross-navigation.
+#[tauri::command]
+pub fn show_window(app: AppHandle, label: String) -> Result<(), String> {
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("window not found: {label}"))?;
+    window.show().map_err(|e| format!("show {label}: {e}"))?;
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+/// Hide a Tauri window by label without destroying it. Preview window
+/// uses this to disappear after auto-hide timer.
+#[tauri::command]
+pub fn hide_window(app: AppHandle, label: String) -> Result<(), String> {
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("window not found: {label}"))?;
+    window.hide().map_err(|e| format!("hide {label}: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn detect_agents() -> Result<Vec<AgentInfo>, String> {
     tokio::task::spawn_blocking(agents::detect_installed_agents)

@@ -71,16 +71,18 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = app.emit(TRAY_SNIP_NOW_EVENT, ());
             }
             MENU_SHOW_HISTORY => {
+                show_window_by_label(app, "history");
                 let _ = app.emit(TRAY_SHOW_HISTORY_EVENT, ());
-                show_main_window(app);
             }
             MENU_OPEN_SETTINGS => {
+                show_window_by_label(app, "settings");
                 let _ = app.emit(TRAY_OPEN_SETTINGS_EVENT, ());
-                show_main_window(app);
             }
             MENU_ABOUT => {
+                // About lives as a tab inside Settings. Show the window
+                // first, then emit so the Settings shell can jump tabs.
+                show_window_by_label(app, "settings");
                 let _ = app.emit(TRAY_ABOUT_EVENT, ());
-                show_main_window(app);
             }
             MENU_QUIT => {
                 app.exit(0);
@@ -159,8 +161,8 @@ pub fn flash_error(app: AppHandle) {
     });
 }
 
-fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+fn show_window_by_label(app: &AppHandle, label: &str) {
+    if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

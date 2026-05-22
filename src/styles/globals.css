@@ -37,3 +37,131 @@ body.overlay-window #root {
   overflow: hidden;
   cursor: crosshair;
 }
+
+/* Preview window is a floating frameless surface. Drop the body
+   background so the rounded React shell defines its own visual edge;
+   without this, the bg-slate fallback would render as a hard rectangle
+   outside the rounded container. */
+html.preview-window,
+body.preview-window,
+body.preview-window #root {
+  background: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Minimal Markdown styling for the Preview Window — markdown-it ships
+   no defaults, and we removed @tailwindcss/typography to keep the
+   bundle lean. Style only the elements OCR output actually produces. */
+.markdown-renderer {
+  line-height: 1.6;
+}
+.markdown-renderer h1,
+.markdown-renderer h2,
+.markdown-renderer h3 {
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+  line-height: 1.3;
+}
+.markdown-renderer h1 { font-size: 1.15em; }
+.markdown-renderer h2 { font-size: 1.05em; }
+.markdown-renderer h3 { font-size: 1em; }
+.markdown-renderer p {
+  margin: 0.5em 0;
+}
+.markdown-renderer br {
+  /* When breaks:true converts a newline to <br>, ensure the resulting
+     visual line has enough vertical room — otherwise rendered math
+     glyphs on adjacent lines can overlap (e.g. answer choices). */
+  line-height: 1.8;
+}
+.markdown-renderer ul,
+.markdown-renderer ol {
+  margin: 0.5em 0;
+  padding-left: 1.6em;
+}
+.markdown-renderer li {
+  margin: 0.35em 0;
+}
+.markdown-renderer li + li {
+  margin-top: 0.4em;
+}
+.markdown-renderer code {
+  background: rgba(100, 116, 139, 0.15);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.markdown-renderer pre {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.6em 0.8em;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.markdown-renderer pre code {
+  background: transparent;
+  padding: 0;
+}
+.markdown-renderer table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.markdown-renderer th,
+.markdown-renderer td {
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  padding: 0.35em 0.65em;
+  vertical-align: top;
+  text-align: left;
+}
+.markdown-renderer th {
+  background: rgba(100, 116, 139, 0.12);
+  font-weight: 600;
+}
+.markdown-renderer a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+@media (prefers-color-scheme: dark) {
+  .markdown-renderer a { color: #60a5fa; }
+}
+.markdown-renderer blockquote {
+  border-left: 3px solid rgba(100, 116, 139, 0.4);
+  padding-left: 0.75em;
+  margin: 0.4em 0;
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* KaTeX inline math inside Markdown sometimes sits flush against the
+   surrounding text — give it a tiny breathing margin so equations
+   in answer choices don't visually collide with the labels. */
+.markdown-renderer .katex {
+  padding: 0 0.1em;
+  line-height: 1.4;
+}
+.markdown-renderer .katex-display {
+  margin: 0.7em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* MathJax CHTML output uses inline-block; ensure display-mode math
+   gets full-width centering and adequate vertical breathing room. */
+.latex-renderer {
+  line-height: 1.6;
+}
+.latex-renderer mjx-container[display="true"] {
+  display: block;
+  margin: 0.5em 0;
+  text-align: center;
+}
+.latex-renderer mjx-container {
+  /* Prevent CHTML's internal absolute positioning from clipping
+     descenders / superscripts at the container edges. */
+  padding: 0.15em 0;
+}
