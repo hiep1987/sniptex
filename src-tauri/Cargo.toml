@@ -24,6 +24,39 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
 
+# Phase 3: agent dispatch + OCR pipeline
+tokio = { version = "1", features = ["full"] }
+regex = "1"
+thiserror = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+base64 = "0.22"
+keyring = "3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[bin]]
+name = "cli_test"
+path = "src/bin/cli_test.rs"
+
+[[test]]
+name = "ocr_postprocess"
+path = "tests/rust/ocr_postprocess_test.rs"
+
+[[test]]
+name = "ocr_smart_format"
+path = "tests/rust/ocr_smart_format_test.rs"
+
+[[test]]
+name = "cloud_gemini_api"
+path = "tests/rust/cloud_gemini_api_test.rs"
+
+[[test]]
+name = "agent_registry_argv"
+path = "tests/rust/agent_registry_argv_test.rs"
+
 # Desktop-only plugins (autostart, updater, global-shortcut require a system tray / window context)
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-autostart = "=2.5.1"

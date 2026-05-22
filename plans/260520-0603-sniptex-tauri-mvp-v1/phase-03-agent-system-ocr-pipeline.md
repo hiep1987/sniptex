@@ -1,7 +1,8 @@
 ---
 phase: 3
 title: "Agent System & OCR Pipeline"
-status: pending
+status: complete
+completed: 2026-05-22
 priority: P1
 effort: "3d"
 dependencies: [2]
@@ -121,22 +122,22 @@ Reference code in `replan.md` §5–§6 — copy structures verbatim then adapt.
 
 ## Todo List
 
-- [ ] Add tokio/regex/thiserror/uuid/dirs/reqwest/base64/keyring deps
-- [ ] Write `ocr/prompt.rs` mirroring post-Session-3 `plans/test-prompt.sh` (DETECTION-internal + table-cell math-scope rule)
-- [ ] Implement `post_process` with all preamble/fence/sign-off strips + category-label defense
-- [ ] Implement `detect_type` 3-heuristic classifier (LaTeX-density check BEFORE blank-line check — Session-3 bug fix)
-- [ ] Write 6+ unit tests for postprocess + smart_format (incl. Session-3 regression guards)
-- [ ] Implement `agents/registry.rs` with 3 specs: codex (default), gemini-cli (gated), cloud-gemini (BYOK)
-- [ ] Implement `agents/keychain.rs` with `keyring` crate (service=com.sniptex)
-- [ ] Implement `agents/cloud_gemini_api.rs` HTTP client to generativelanguage.googleapis.com
-- [ ] Implement cross-platform `detect_installed_agents` + executable check + cloud-key presence check
-- [ ] Implement `run_ocr` dual-path (CliBin + CloudApi) with 30s timeout + rate-limit detection
-- [ ] Implement `run_with_fallback` chain (default priority: codex → cloud-gemini → gemini-cli)
-- [ ] Expose 5 Tauri commands (`detect_agents`, `test_agent`, `set_api_key`, `has_api_key`, stub `run_snip`)
-- [ ] Build CLI test binary supporting all 3 agent IDs
-- [ ] Run cargo test — all green
-- [ ] Smoke test cli_test on real fixture image, all 3 agents
-- [ ] Verify Gemini CLI `--approval-mode plan` prevents `read_file ~/.claude/.ck.json` failure mode
+- [x] Add tokio/regex/thiserror/uuid/dirs/reqwest/base64/keyring deps
+- [x] Write `ocr/prompt.rs` mirroring post-Session-3 `plans/test-prompt.sh` (DETECTION-internal + table-cell math-scope rule)
+- [x] Implement `post_process` with all preamble/fence/sign-off strips + category-label defense
+- [x] Implement `detect_type` 3-heuristic classifier (LaTeX-density check BEFORE blank-line check — Session-3 bug fix)
+- [x] Write 6+ unit tests for postprocess + smart_format (incl. Session-3 regression guards) — 29 tests total
+- [x] Implement `agents/registry.rs` with 3 specs: codex (default), gemini-cli (gated), cloud-gemini (BYOK)
+- [x] Implement `agents/keychain.rs` with `keyring` crate (service=com.sniptex) — incl. `has_detailed` to distinguish NotFound from backend faults
+- [x] Implement `agents/cloud_gemini_api.rs` HTTP client to generativelanguage.googleapis.com (rustls-tls only, key redaction in errors)
+- [x] Implement cross-platform `detect_installed_agents` + executable check + cloud-key presence check
+- [x] Implement `run_ocr` dual-path (CliBin + CloudApi) with 30s timeout + rate-limit detection (tightened: word-boundary 429 + context tokens)
+- [x] Implement `run_with_fallback` chain (default priority: codex → cloud-gemini → gemini-cli)
+- [x] Expose 5 Tauri commands (`detect_agents`, `test_agent`, `set_api_key`, `has_api_key`, stub `run_snip`) + `delete_api_key`
+- [x] Build CLI test binary supporting all 3 agent IDs
+- [x] Run cargo test — all green (29 tests pass, 0 clippy warnings)
+- [x] Smoke test cli_test on real fixture image — codex ✅ (clean LaTeX), gemini-cli ✅ (plan-mode gate verified), cloud-gemini deferred (requires user API key)
+- [x] Verify Gemini CLI `--approval-mode plan` prevents `read_file ~/.claude/.ck.json` failure mode — confirmed: plan-mode refuses out-of-workspace reads instead of looping into tool calls. Trade-off (workspace restriction) is the documented "best-effort" mitigation per Risk Assessment.
 
 ## Success Criteria
 

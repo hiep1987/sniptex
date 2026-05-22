@@ -1,6 +1,10 @@
+pub mod agents;
 mod commands;
+pub mod ocr;
 
-use commands::hello;
+use commands::{
+    delete_api_key, detect_agents, has_api_key, hello, run_snip, set_api_key, test_agent,
+};
 
 #[cfg(desktop)]
 use std::sync::Mutex;
@@ -82,7 +86,15 @@ pub fn run() {
 
     builder
         .setup(|_app| Ok(()))
-        .invoke_handler(tauri::generate_handler![hello])
+        .invoke_handler(tauri::generate_handler![
+            hello,
+            detect_agents,
+            test_agent,
+            set_api_key,
+            has_api_key,
+            delete_api_key,
+            run_snip
+        ])
         .run(tauri::generate_context!())
         .expect("error while running SnipTeX");
 }
