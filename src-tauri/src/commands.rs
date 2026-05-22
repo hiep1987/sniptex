@@ -17,6 +17,8 @@ use crate::capture::{
     SelectionRect,
 };
 use crate::ocr::{self, dispatcher::DispatchError, smart_format::DetectedType};
+use crate::state::TrayStatus;
+use crate::tray;
 
 const OVERLAY_WINDOW_LABEL: &str = "overlay";
 const CAPTURE_START_EVENT: &str = "capture-start";
@@ -114,6 +116,30 @@ pub async fn run_snip(
     let _busy = SnipBusyGuard::try_acquire()
         .ok_or_else(|| "snip already in progress".to_string())?;
 
+    tray::set_status(&app, TrayStatus::Capturing);
+    let result = run_snip_inner(&app, agent_id).await;
+
+    match &result {
+        Ok(snip) if snip.status == "ok" => {
+            tray::set_status(&app, TrayStatus::Idle);
+            let _ = app.emit("snip-complete", snip.clone());
+        }
+        Ok(_cancelled) => {
+            tray::set_status(&app, TrayStatus::Idle);
+        }
+        Err(err) => {
+            let _ = app.emit("snip-error", err.clone());
+            tray::flash_error(app.clone());
+        }
+    }
+
+    result
+}
+
+async fn run_snip_inner(
+    app: &AppHandle,
+    agent_id: Option<String>,
+) -> Result<SnipResult, String> {
     // `cursor_position` returns physical pixels scaled by the PRIMARY
     // monitor's DPI factor (tao at macos/util/mod.rs:107). xcap's
     // `Monitor::from_point` (and `CGGetDisplaysWithPoint` under it) uses
@@ -141,7 +167,7 @@ pub async fn run_snip(
     // guard until end-of-function makes that mechanical.
     let _full_png_guard = TempFileGuard::new(snapshot.full_png_path.clone());
 
-    let selection = show_overlay_and_await_selection(&app, &snapshot).await?;
+    let selection = show_overlay_and_await_selection(app, &snapshot).await?;
 
     let Some(sel) = selection else {
         return Ok(SnipResult {
@@ -152,6 +178,11 @@ pub async fn run_snip(
             image_path: None,
         });
     };
+
+    // User has drawn a region — overlay has hidden via OverlayHideGuard
+    // and we're now in the OCR phase. Flip the tray so the user can tell
+    // the slow path (network/CLI) is in progress.
+    tray::set_status(app, TrayStatus::Processing);
 
     let full_path = snapshot.full_png_path.clone();
     let scale = snapshot.scale_factor;
@@ -322,7 +353,7 @@ pub struct TestAgentReport {
     pub preview: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct SnipResult {
     pub status: String,
     pub text: Option<String>,

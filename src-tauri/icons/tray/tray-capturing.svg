@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+  <!-- Solid filled selection-marquee rectangle. Distinct from idle (camera) so the
+       capturing state is unmistakable in the menu bar. -->
+  <path fill="#000" fill-rule="evenodd" d="M3 4 H9 V6 H5 V10 H3 Z M13 4 H19 V10 H17 V6 H13 Z M3 12 H5 V16 H9 V18 H3 Z M13 18 V16 H17 V12 H19 V18 Z" />
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+  <!-- Camera body solid + three filled dots in the lens area (working/ellipsis). -->
+  <path fill="#000" fill-rule="evenodd" d="
+    M8.5 4 L7.2 6 H4.5 A2.5 2.5 0 0 0 2 8.5 V16 A2.5 2.5 0 0 0 4.5 18.5 H17.5 A2.5 2.5 0 0 0 20 16 V8.5 A2.5 2.5 0 0 0 17.5 6 H14.8 L13.5 4 Z
+    M11 8 A4.2 4.2 0 1 1 11 16.4 A4.2 4.2 0 0 1 11 8 Z
+  " />
+  <circle cx="8.4" cy="12.2" r="0.95" fill="#000" />
+  <circle cx="11" cy="12.2" r="0.95" fill="#000" />
+  <circle cx="13.6" cy="12.2" r="0.95" fill="#000" />
+</svg>

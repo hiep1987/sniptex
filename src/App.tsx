@@ -21,10 +21,9 @@ export default function App() {
     // after cleanup runs, so we guard with a cancelled flag and unlisten
     // immediately if the effect was already torn down.
     let cancelled = false;
-    let unlisten: UnlistenFn | undefined;
+    const unlisteners: UnlistenFn[] = [];
 
-    listen("hotkey-pressed", async () => {
-      recordPress();
+    const triggerSnip = async () => {
       if (snipInFlight.current) return;
       snipInFlight.current = true;
       try {
@@ -45,19 +44,41 @@ export default function App() {
       } finally {
         snipInFlight.current = false;
       }
-    })
-      .then((fn) => {
-        if (cancelled) {
-          fn();
-        } else {
-          unlisten = fn;
-        }
-      })
-      .catch(console.error);
+    };
+
+    const subscribe = async () => {
+      const [hotkeyOff, trayOff, conflictOff] = await Promise.all([
+        listen("hotkey-pressed", () => {
+          recordPress();
+          void triggerSnip();
+        }),
+        listen("tray-snip-now", () => {
+          void triggerSnip();
+        }),
+        listen<{ shortcut: string; reason: string }>(
+          "hotkey-conflict",
+          (event) => {
+            toast.error("Hotkey unavailable", {
+              description: event.payload.reason,
+              duration: 8000,
+            });
+          },
+        ),
+      ]);
+      if (cancelled) {
+        hotkeyOff();
+        trayOff();
+        conflictOff();
+      } else {
+        unlisteners.push(hotkeyOff, trayOff, conflictOff);
+      }
+    };
+
+    subscribe().catch(console.error);
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      for (const off of unlisteners) off();
     };
   }, [recordPress]);
 

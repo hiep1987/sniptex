@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+  <!-- Camera body solid + lens hole (donut), with an exclamation centered in the lens. -->
+  <path fill="#000" fill-rule="evenodd" d="
+    M8.5 4 L7.2 6 H4.5 A2.5 2.5 0 0 0 2 8.5 V16 A2.5 2.5 0 0 0 4.5 18.5 H17.5 A2.5 2.5 0 0 0 20 16 V8.5 A2.5 2.5 0 0 0 17.5 6 H14.8 L13.5 4 Z
+    M11 8 A4.2 4.2 0 1 1 11 16.4 A4.2 4.2 0 0 1 11 8 Z
+    M11 9.6 A2.6 2.6 0 1 0 11 14.8 A2.6 2.6 0 0 0 11 9.6 Z
+  " />
+  <rect x="10.4" y="10.2" width="1.2" height="3" fill="#000" />
+  <rect x="10.4" y="13.8" width="1.2" height="1.2" fill="#000" />
+</svg>
