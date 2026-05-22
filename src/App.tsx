@@ -13,7 +13,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // StrictMode double-invokes effects in dev; the listen() promise can resolve
+    // after cleanup runs, so we guard with a cancelled flag and unlisten
+    // immediately if the effect was already torn down.
+    let cancelled = false;
     let unlisten: UnlistenFn | undefined;
+
     listen("hotkey-pressed", () => {
       recordPress();
       toast("Hotkey received", {
@@ -21,11 +26,16 @@ export default function App() {
       });
     })
       .then((fn) => {
-        unlisten = fn;
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
       })
       .catch(console.error);
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [recordPress]);

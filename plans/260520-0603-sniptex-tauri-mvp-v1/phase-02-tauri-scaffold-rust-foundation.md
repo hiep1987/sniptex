@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Tauri Scaffold & Rust Foundation"
-status: in-progress
+status: complete
 priority: P1
 effort: "2d"
 dependencies: [1]
@@ -100,8 +100,8 @@ sniptex/
 - [x] Configure tauri.conf.json (productName SnipTeX, com.sniptex.app, bundle [app, dmg, msi, nsis])
 - [x] Configure capabilities permissions (least-privilege; explicit per-plugin grants, no allowAll)
 - [x] Register global shortcut Cmd/Ctrl+Shift+M with console log + frontend toast (cfg(target_os = "macos") routes to Super, else Control)
-- [ ] Run `pnpm tauri dev` and confirm hotkey roundtrip works on Mac (compile verified; hotkey requires human + macOS Accessibility grant)
-- [ ] Commit baseline
+- [x] Run `pnpm tauri dev` and confirm hotkey roundtrip works on Mac (verified 2026-05-22 — single press → single toast; required Rust 150 ms debounce for macOS Sequoia + global-hotkey 0.7 double-fire AND React StrictMode-safe `listen` cleanup)
+- [x] Commit baseline (b6acff3 scaffold + follow-up fix commit)
 
 ## Success Criteria
 
@@ -115,6 +115,7 @@ sniptex/
 
 - **Risk: Tauri 2 plugin API changes mid-development** — Mitigation: pin exact patch versions of plugins; check Tauri 2 changelog before bumping.
 - **Risk: Tailwind 4 still alpha at scaffold time** — Mitigation: pin to a tested alpha build; **do not** fall back to v3 (Validation Session 1 confirmed v4 commitment).
+- **Realised 2026-05-22: macOS Sequoia + `global-hotkey` 0.7 double-fires `kEventHotKeyPressed`** — one physical press produces two `Pressed→Released` cycles at the Carbon API. Worked around with a 150 ms application-layer debounce in `lib.rs`. Revisit when Tauri bumps `global-hotkey` to a fixed version. Also added React StrictMode-safe `listen` cleanup in `App.tsx` to prevent dev-mode listener duplication.
 
 ## Security Considerations
 
