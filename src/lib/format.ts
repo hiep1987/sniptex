@@ -13,13 +13,12 @@
 
 import type { DetectedType } from "./invoke";
 
-export type FormatKind =
-  | "raw"
-  | "inline"
-  | "display"
-  | "plain"
-  | "markdown"
-  | "mathml";
+// Export modes the user can pick from "Copy as…". Kept intentionally
+// small so every entry has a *meaningful* transformation today; the
+// upstream OCR agent (Codex / Gemini) already decides inline vs
+// display vs Markdown-mixed semantics, so we don't expose redundant
+// delimiter-only variants until Phase 9 wires real conversion.
+export type FormatKind = "raw" | "tex" | "plain" | "markdown" | "mathml";
 
 export type FormatOption = {
   kind: FormatKind;
@@ -28,11 +27,11 @@ export type FormatOption = {
 
 /**
  * Choose a sensible default copy format for the given detected type.
- * Equation-only snips ship as display LaTeX; everything else flows
- * through as Markdown.
+ * Equation-only snips ship as TeX (paste-into-.tex friendly);
+ * everything else flows through as Markdown.
  */
 export function defaultFormatFor(detected: DetectedType | null): FormatKind {
-  if (detected === "EQUATION_ONLY") return "display";
+  if (detected === "EQUATION_ONLY") return "tex";
   return "markdown";
 }
 
@@ -52,10 +51,13 @@ export async function formatOutput(
   switch (kind) {
     case "raw":
       return text;
-    case "inline":
-      return toInline(text, detected);
-    case "display":
-      return toDisplay(text, detected);
+    case "tex":
+      // The OCR master prompt emits paste-ready LaTeX already (no outer
+      // delimiters for EQUATION_ONLY; `$…$` / `$$…$$` inside Markdown
+      // for TABLE/MIXED). Returning verbatim is the honest behaviour
+      // until Phase 9 adds the `\begin{tabular}` toggle that would
+      // make TeX meaningfully different from Markdown for tables.
+      return text;
     case "plain":
       return toPlain(text);
     case "markdown":
@@ -63,16 +65,6 @@ export async function formatOutput(
     case "mathml":
       return await toMathML(text, detected);
   }
-}
-
-function toInline(text: string, detected: DetectedType | null): string {
-  if (detected === "EQUATION_ONLY") return `$${text.trim()}$`;
-  return text;
-}
-
-function toDisplay(text: string, detected: DetectedType | null): string {
-  if (detected === "EQUATION_ONLY") return `$$${text.trim()}$$`;
-  return text;
 }
 
 function toPlain(text: string): string {
@@ -126,9 +118,8 @@ async function toMathML(
 
 export const COPY_AS_OPTIONS: FormatOption[] = [
   { kind: "raw", label: "Raw OCR text" },
-  { kind: "inline", label: "Inline LaTeX ($…$)" },
-  { kind: "display", label: "Display LaTeX ($$…$$)" },
-  { kind: "plain", label: "Plain text (no delimiters)" },
+  { kind: "tex", label: "TeX" },
+  { kind: "plain", label: "Plain text" },
   { kind: "markdown", label: "Markdown" },
   { kind: "mathml", label: "MathML" },
 ];

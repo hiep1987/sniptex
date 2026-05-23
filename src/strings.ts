@@ -19,9 +19,8 @@ export const strings = {
   },
   copyAs: {
     raw: "Raw OCR text",
-    inline: "Inline LaTeX ($…$)",
-    display: "Display LaTeX ($$…$$)",
-    plain: "Plain text (no delimiters)",
+    tex: "TeX",
+    plain: "Plain text",
     markdown: "Markdown",
     mathml: "MathML",
   },
