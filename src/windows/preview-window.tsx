@@ -21,7 +21,6 @@ import { COPY_AS_OPTIONS, defaultFormatFor, formatOutput, type FormatKind } from
 import { useAutoHide } from "@/hooks/use-auto-hide";
 import { useSnipResult } from "@/hooks/use-snip-result";
 import { useSnipTrigger } from "@/hooks/use-snip-trigger";
-import { useHistoryStore } from "@/stores/history-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { cn } from "@/lib/cn";
 import { strings } from "@/strings";
@@ -39,7 +38,6 @@ export default function PreviewWindow() {
   const event = useSnipResult();
   const snip = event?.result ?? null;
   const autoHideMs = useSettingsStore((s) => s.autoHideMs);
-  const pushHistory = useHistoryStore((s) => s.push);
 
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -119,14 +117,11 @@ export default function PreviewWindow() {
     setCopyState("idle");
     setMenuOpen(false);
 
-    pushHistory({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      text: snip.text,
-      detected: snip.detected,
-      agent: snip.agent,
-      imagePath: snip.image_path,
-      createdAt: Date.now(),
-    });
+    // History persistence happens entirely in Rust (`persist_to_history`
+    // before the snip-complete event fires). HistoryWindow listens for
+    // that same event in its own webview and refetches from SQLite —
+    // pushing into a per-window Zustand store from here is a no-op
+    // because each Tauri window has its own JS context.
 
     // Auto-copy the default format so the user can paste immediately
     // without needing to click anything. The visible window is a
@@ -139,7 +134,7 @@ export default function PreviewWindow() {
     // event.seq is the source of truth: identical snip text shouldn't
     // suppress the re-show.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event?.seq, pushHistory]);
+  }, [event?.seq]);
 
   // Dev-only mount marker for the JS console — confirms the React tree
   // actually booted inside the (initially-hidden) Preview window.

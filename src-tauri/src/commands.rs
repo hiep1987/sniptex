@@ -1,12 +1,14 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize, Manager, WebviewWindow,
+    AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize, Manager, State,
+    WebviewWindow,
 };
+use uuid::Uuid;
 
 use crate::agents::{
     self, keychain,
@@ -18,7 +20,12 @@ use crate::capture::{
 };
 use crate::ocr::{self, dispatcher::DispatchError, smart_format::DetectedType};
 use crate::state::TrayStatus;
+use crate::storage::{self, history as history_repo, HistoryStore};
 use crate::tray;
+
+// Keep ~last 100 records on disk by default. v1 has no Settings hook for
+// this yet (Phase 8 wires the slider); change in one place to adjust.
+const DEFAULT_MAX_RECORDS: usize = 100;
 
 const OVERLAY_WINDOW_LABEL: &str = "overlay";
 const CAPTURE_START_EVENT: &str = "capture-start";
@@ -125,9 +132,11 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
 /// crop → OCR (specific agent or fallback chain).
 ///
 /// Returns `SnipResult` with `status` = `"ok" | "cancelled"`. On `ok`
-/// the `text`, `detected`, and `agent` fields are populated; the temp
-/// PNG is deleted after OCR. On `cancelled` the full-monitor PNG is
-/// also cleaned up.
+/// the `text`, `detected`, and `agent` fields are populated; the cropped
+/// PNG is moved into the persistent history dir (so "Rerun with…" can
+/// re-OCR the same image with a different agent) and a `HistoryRecord`
+/// row is inserted. On `cancelled` only the full-monitor PNG is cleaned
+/// up.
 #[tauri::command]
 pub async fn run_snip(
     app: AppHandle,
@@ -139,6 +148,24 @@ pub async fn run_snip(
     // directly — defense in depth.
     let _busy = SnipBusyGuard::try_acquire()
         .ok_or_else(|| "snip already in progress".to_string())?;
+
+    // Hide every visible SnipTeX surface BEFORE the screenshot — otherwise
+    // the main / settings / history window itself ends up in the captured
+    // backdrop and the user can't drag-select what's behind it.
+    //
+    // On macOS we use `AppHandle::hide()` (whole-app NSApplication.hide:)
+    // so the next app's window actually comes forward and macOS repaints
+    // the screen properly before xcap reads the framebuffer. Per-window
+    // hide doesn't deactivate the app and the compositor leaves the
+    // newly-uncovered region stale.
+    //
+    // The 300 ms delay covers two things: the macOS deactivate animation
+    // (~200 ms) and the next-app's window-server repaint. Empirically
+    // 150 ms is too short on Apple Silicon under heavier load.
+    #[cfg(target_os = "macos")]
+    let _ = app.hide();
+    let _vis_guard = CaptureVisibilityGuard::hide_user_windows(&app);
+    tokio::time::sleep(Duration::from_millis(300)).await;
 
     tray::set_status(&app, TrayStatus::Capturing);
     let result = run_snip_inner(&app, agent_id).await;
@@ -200,6 +227,7 @@ async fn run_snip_inner(
             detected: None,
             agent: None,
             image_path: None,
+            record_id: None,
         });
     };
 
@@ -217,20 +245,139 @@ async fn run_snip_inner(
     .map_err(|e| format!("crop join failed: {e}"))?
     .map_err(stringify_crop_error)?;
 
-    // Cropped PNG is also a temp file with potentially-sensitive screen
-    // content — guard it the same way.
-    let _cropped_guard = TempFileGuard::new(cropped_path.clone());
+    // Cropped PNG is held under a guard until we successfully move it
+    // into the persistent history dir below; if OCR errors out the guard
+    // ensures the temp file is still removed.
+    let cropped_guard = TempFileGuard::new(cropped_path.clone());
     let cropped_str = cropped_path.to_string_lossy().to_string();
 
+    let ocr_started = Instant::now();
     let (text, agent) = run_ocr_for_path(agent_id, &cropped_str).await?;
+    let latency_ms = ocr_started.elapsed().as_millis() as i64;
     let detected = ocr::detect_type(&text);
+
+    // Move cropped PNG into history.images/{uuid}.png + generate thumb +
+    // insert the row. Errors here are logged-and-swallowed so the user
+    // still gets their OCR result; History just won't show this snip.
+    let store = app.state::<HistoryStore>();
+    let persisted = persist_to_history(&store, &cropped_path, &text, &agent, &detected, latency_ms);
+    // Persistence took ownership of the temp file — disarm the guard so
+    // it doesn't try to delete the now-renamed file.
+    let (record_id, persisted_image_path) = match persisted {
+        Ok((id, img)) => {
+            cropped_guard.disarm();
+            (Some(id), Some(img))
+        }
+        Err(err) => {
+            log::error!("history persist failed: {err}");
+            (None, Some(cropped_str.clone()))
+        }
+    };
+
     Ok(SnipResult {
         status: "ok".into(),
         text: Some(text),
         detected: Some(detected),
         agent: Some(agent),
-        image_path: Some(cropped_str),
+        image_path: persisted_image_path,
+        record_id,
     })
+}
+
+/// Move the temp cropped PNG into `{app_data}/images/{uuid}.png`, render
+/// the 200×200 WebP thumb, insert a history row, and trim oldest records
+/// past `DEFAULT_MAX_RECORDS`. Returns `(record_id, persistent image path)`.
+fn persist_to_history(
+    store: &State<'_, HistoryStore>,
+    cropped_path: &Path,
+    text: &str,
+    agent_id: &str,
+    detected: &DetectedType,
+    latency_ms: i64,
+) -> Result<(i64, String), String> {
+    let uuid_str = Uuid::new_v4().to_string();
+    let images_dir = store.images_dir();
+    let thumbs_dir = store.thumbs_dir();
+
+    let image_dst = images_dir.join(format!("{uuid_str}.png"));
+    let thumb_dst = thumbs_dir.join(format!("{uuid_str}.webp"));
+
+    // Rename when on the same filesystem (the temp PNG lives in TMPDIR,
+    // history lives under app-data — often different volumes on Windows),
+    // fall back to copy + remove otherwise.
+    if std::fs::rename(cropped_path, &image_dst).is_err() {
+        std::fs::copy(cropped_path, &image_dst)
+            .map_err(|e| format!("copy cropped png: {e}"))?;
+        let _ = std::fs::remove_file(cropped_path);
+    }
+
+    // From here on, the persisted image at `image_dst` is committed —
+    // if any subsequent step (thumbnail / insert) fails, we must remove
+    // it (and the partial thumb) ourselves; the temp-file guard above
+    // already saw the rename steal its path.
+    if let Err(e) = storage::thumbnail::make_thumbnail(&image_dst, &thumb_dst) {
+        let _ = std::fs::remove_file(&image_dst);
+        return Err(format!("thumbnail: {e}"));
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let detected_str = detected_to_string(detected);
+    let new_record = history_repo::NewRecord {
+        uuid: uuid_str,
+        created_at: now,
+        agent_id: agent_id.to_string(),
+        output_text: text.to_string(),
+        detected_type: detected_str,
+        image_path: image_dst.to_string_lossy().to_string(),
+        thumb_path: thumb_dst.to_string_lossy().to_string(),
+        latency_ms,
+    };
+
+    let new_id_res: Result<i64, String> = (|| {
+        let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+        let id = history_repo::insert(&conn, &new_record).map_err(|e| e.to_string())?;
+        let evicted = history_repo::enforce_max_records(&conn, DEFAULT_MAX_RECORDS)
+            .map_err(|e| e.to_string())?;
+        // Drop the connection lock before touching disk so eviction
+        // cleanup can't deadlock against a concurrent reader.
+        drop(conn);
+        for (img, thumb) in evicted {
+            storage::remove_file_if_exists(&img);
+            storage::remove_file_if_exists(&thumb);
+        }
+        Ok(id)
+    })();
+
+    match new_id_res {
+        Ok(id) => Ok((id, new_record.image_path)),
+        Err(e) => {
+            // Roll back the moved image + generated thumb so they don't
+            // orphan under app_data when the DB write fails.
+            let _ = std::fs::remove_file(&image_dst);
+            let _ = std::fs::remove_file(&thumb_dst);
+            Err(e)
+        }
+    }
+}
+
+fn detected_to_string(d: &DetectedType) -> String {
+    match d {
+        DetectedType::EquationOnly => "EQUATION_ONLY".into(),
+        DetectedType::TableOnly => "TABLE_ONLY".into(),
+        DetectedType::Mixed => "MIXED".into(),
+    }
+}
+
+fn detected_from_string(s: &str) -> DetectedType {
+    match s {
+        "EQUATION_ONLY" => DetectedType::EquationOnly,
+        "TABLE_ONLY" => DetectedType::TableOnly,
+        _ => DetectedType::Mixed,
+    }
 }
 
 async fn show_overlay_and_await_selection(
@@ -240,6 +387,15 @@ async fn show_overlay_and_await_selection(
     let overlay = app
         .get_webview_window(OVERLAY_WINDOW_LABEL)
         .ok_or_else(|| "overlay window not configured in tauri.conf.json".to_string())?;
+
+    // The whole app was hidden in `run_snip` so the screenshot wouldn't
+    // include our own windows. Re-show the app now so the overlay can
+    // actually become key (NSApp.hide() leaves child windows in an
+    // orderable-but-not-key state).
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.show();
+    }
 
     // Position + size the overlay over the captured monitor. xcap's
     // `Monitor::x/y/width/height` return values in the macOS global
@@ -384,6 +540,7 @@ pub struct SnipResult {
     pub detected: Option<DetectedType>,
     pub agent: Option<String>,
     pub image_path: Option<String>,
+    pub record_id: Option<i64>,
 }
 
 fn stringify_dispatch_error(e: DispatchError) -> String {
@@ -431,20 +588,28 @@ impl Drop for SnipBusyGuard {
 }
 
 /// RAII guard: deletes the wrapped temp file on drop — including
-/// `?` early-return, future cancellation, and panic.
+/// `?` early-return, future cancellation, and panic. Call `disarm()`
+/// after a successful rename/move so the guard becomes a no-op.
 struct TempFileGuard {
     path: PathBuf,
+    armed: bool,
 }
 
 impl TempFileGuard {
     fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self { path, armed: true }
+    }
+
+    fn disarm(mut self) {
+        self.armed = false;
     }
 }
 
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if self.armed {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -477,5 +642,215 @@ impl Drop for OverlayHideGuard {
     }
 }
 
+/// Hides any visible user-facing SnipTeX windows for the duration of a
+/// capture and restores them on drop. Without this, clicking "Snip now"
+/// from the main window captures the main window itself into the
+/// backdrop — the document the user actually wants to snip is occluded.
+/// The `overlay` and `preview` windows are excluded: overlay is owned
+/// by the capture flow itself, and preview is auto-managed and would
+/// only ever be visible from the previous snip (we want it gone too,
+/// but its own hide-show cycle already covers that).
+struct CaptureVisibilityGuard {
+    app: AppHandle,
+    restored_labels: Vec<&'static str>,
+}
+
+impl CaptureVisibilityGuard {
+    fn hide_user_windows(app: &AppHandle) -> Self {
+        const CANDIDATES: &[&str] = &["main", "settings", "history", "onboarding", "preview"];
+        let mut hidden = Vec::new();
+        for label in CANDIDATES {
+            if let Some(w) = app.get_webview_window(label) {
+                if w.is_visible().unwrap_or(false) {
+                    let _ = w.hide();
+                    hidden.push(*label);
+                }
+            }
+        }
+        Self {
+            app: app.clone(),
+            restored_labels: hidden,
+        }
+    }
+}
+
+impl Drop for CaptureVisibilityGuard {
+    fn drop(&mut self) {
+        for label in &self.restored_labels {
+            if let Some(w) = self.app.get_webview_window(label) {
+                // `preview` re-shows itself when a fresh snip-complete
+                // arrives — re-showing it here would briefly flash the
+                // STALE previous-snip content. Skip it on restore.
+                if *label == "preview" {
+                    continue;
+                }
+                let _ = w.show();
+            }
+        }
+    }
+}
+
 // Compile-time guard: cloud agent id stays exported from registry.
 const _: &str = CLOUD_GEMINI_ID;
+
+// -----------------------------------------------------------------------
+// Phase 7: history commands
+// -----------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct HistoryRecordDto {
+    pub id: i64,
+    pub uuid: String,
+    pub created_at: i64,
+    pub agent: String,
+    pub text: String,
+    pub detected: DetectedType,
+    pub image_path: String,
+    pub thumb_path: String,
+    pub latency_ms: i64,
+}
+
+impl From<history_repo::Record> for HistoryRecordDto {
+    fn from(r: history_repo::Record) -> Self {
+        Self {
+            id: r.id,
+            uuid: r.uuid,
+            created_at: r.created_at,
+            agent: r.agent_id,
+            text: r.output_text,
+            detected: detected_from_string(&r.detected_type),
+            image_path: r.image_path,
+            thumb_path: r.thumb_path,
+            latency_ms: r.latency_ms,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Latex,
+    Markdown,
+    Plain,
+}
+
+#[tauri::command]
+pub fn get_history(
+    store: State<'_, HistoryStore>,
+    limit: usize,
+) -> Result<Vec<HistoryRecordDto>, String> {
+    let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+    let rows = history_repo::recent(&conn, limit).map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(HistoryRecordDto::from).collect())
+}
+
+#[tauri::command]
+pub fn search_history(
+    store: State<'_, HistoryStore>,
+    query: String,
+    limit: usize,
+) -> Result<Vec<HistoryRecordDto>, String> {
+    let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+    let rows = history_repo::search(&conn, &query, limit).map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(HistoryRecordDto::from).collect())
+}
+
+#[tauri::command]
+pub fn delete_record(store: State<'_, HistoryStore>, id: i64) -> Result<(), String> {
+    let paths = {
+        let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+        history_repo::delete(&conn, id).map_err(|e| e.to_string())?
+    };
+    if let Some((img, thumb)) = paths {
+        storage::remove_file_if_exists(&img);
+        storage::remove_file_if_exists(&thumb);
+    }
+    Ok(())
+}
+
+/// Re-OCR the persisted image with a chosen agent and update the same
+/// row in-place. Returns the refreshed record so the UI can swap text +
+/// agent badge without a refetch.
+#[tauri::command]
+pub async fn rerun_snip(
+    app: AppHandle,
+    record_id: i64,
+    agent_id: String,
+) -> Result<HistoryRecordDto, String> {
+    let store = app.state::<HistoryStore>();
+    let record = {
+        let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+        history_repo::find_by_id(&conn, record_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("record not found: {record_id}"))?
+    };
+
+    let image_path = record.image_path.clone();
+    let started = Instant::now();
+    let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path).await?;
+    let latency_ms = started.elapsed().as_millis() as i64;
+    let detected = ocr::detect_type(&text);
+    let detected_str = detected_to_string(&detected);
+
+    {
+        let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+        let updated = history_repo::update_output(
+            &conn,
+            record_id,
+            &text,
+            &used_agent,
+            &detected_str,
+            latency_ms,
+        )
+        .map_err(|e| e.to_string())?;
+        if updated == 0 {
+            // A concurrent `delete_record` removed the row between our
+            // initial fetch and now. Surface that to the caller instead
+            // of pretending the rerun succeeded.
+            return Err(format!("record {record_id} no longer exists"));
+        }
+    }
+
+    Ok(HistoryRecordDto {
+        id: record.id,
+        uuid: record.uuid,
+        created_at: record.created_at,
+        agent: used_agent,
+        text,
+        detected,
+        image_path: record.image_path,
+        thumb_path: record.thumb_path,
+        latency_ms,
+    })
+}
+
+#[tauri::command]
+pub fn export_record(
+    store: State<'_, HistoryStore>,
+    id: i64,
+    format: ExportFormat,
+) -> Result<String, String> {
+    let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+    let rec = history_repo::find_by_id(&conn, id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("record not found: {id}"))?;
+    Ok(format_export(&rec.output_text, &format))
+}
+
+fn format_export(text: &str, format: &ExportFormat) -> String {
+    match format {
+        ExportFormat::Plain => text.to_string(),
+        ExportFormat::Markdown => text.to_string(),
+        // Wrap raw output in a `$$ … $$` block when it looks like a
+        // bare LaTeX expression so it pastes cleanly into a .tex file.
+        // Phase 9 will replace this stub with the proper Format Toggle
+        // (Markdown ↔ tabular ↔ raw LaTeX).
+        ExportFormat::Latex => {
+            if text.contains("\\begin{") || text.contains("$$") {
+                text.to_string()
+            } else {
+                format!("$$\n{}\n$$", text.trim())
+            }
+        }
+    }
+}

@@ -21,6 +21,11 @@ pub const TRAY_SHOW_HISTORY_EVENT: &str = "tray-show-history";
 pub const TRAY_OPEN_SETTINGS_EVENT: &str = "tray-open-settings";
 pub const TRAY_ABOUT_EVENT: &str = "tray-about";
 
+/// Emitted whenever the snip pipeline transitions state (idle ↔ capturing
+/// ↔ processing ↔ error). Lets any window listen for "a snip is in flight"
+/// independently of which entry point (button, hotkey, tray) triggered it.
+pub const SNIP_STATE_EVENT: &str = "snip-state";
+
 // Mac template PNGs live next to the bundled app icons. Loaded at runtime
 // via the resource path so they ship with the bundle on all platforms.
 const ICON_IDLE: &[u8] = include_bytes!("../icons/tray/tray-idle.png");
@@ -143,6 +148,11 @@ pub fn set_status(app: &AppHandle, status: TrayStatus) {
         let _ = tray.set_icon(Some(icon));
     }
     let _ = tray.set_tooltip(Some(status.tooltip()));
+
+    // Mirror the tray status to a webview event so any entry point —
+    // button click, global hotkey, tray menu — keeps the visible UI in
+    // sync without each window having to wire its own trigger detection.
+    let _ = app.emit(SNIP_STATE_EVENT, status);
 }
 
 /// Show the Error icon for a brief moment, then auto-reset to Idle.

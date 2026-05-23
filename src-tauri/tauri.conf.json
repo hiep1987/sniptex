@@ -106,7 +106,11 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$TEMP/sniptex/**"],
+          "allow": [
+            "$TEMP/sniptex/**",
+            "$APPDATA/images/**",
+            "$APPDATA/thumbs/**"
+          ],
           "deny": []
         }
       }

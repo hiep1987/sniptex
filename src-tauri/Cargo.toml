@@ -39,12 +39,20 @@ keyring = "3"
 xcap = "0.9"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Phase 7: SQLite history + FTS5 search + WebP thumbnails
+rusqlite = { version = "0.32", features = ["bundled"] }
+webp = "0.3"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[bin]]
 name = "cli_test"
 path = "src/bin/cli_test.rs"
+
+[[bin]]
+name = "history_smoke"
+path = "src/bin/history_smoke.rs"
 
 [[test]]
 name = "ocr_postprocess"
@@ -61,6 +69,10 @@ path = "tests/rust/cloud_gemini_api_test.rs"
 [[test]]
 name = "agent_registry_argv"
 path = "tests/rust/agent_registry_argv_test.rs"
+
+[[test]]
+name = "storage_history"
+path = "tests/rust/storage_history_test.rs"
 
 # Desktop-only plugins (autostart, updater, global-shortcut require a system tray / window context)
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]

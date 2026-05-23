@@ -18,10 +18,15 @@ import { strings } from "@/strings";
  * snip pipeline (PreviewWindow owns those listeners); the buttons
  * here are a convenience entry point.
  */
+type SnipStatus = "idle" | "capturing" | "processing" | "error";
+
 export default function App() {
   const [hello, setHello] = useState<HelloReply | null>(null);
   const [lastSnip, setLastSnip] = useState<SnipResult | null>(null);
-  const [snipping, setSnipping] = useState(false);
+  // Driven by the Rust-emitted `snip-state` event so the button reflects
+  // ANY snip trigger — button click, global hotkey, or tray menu — not
+  // just clicks on this button.
+  const [snipStatus, setSnipStatus] = useState<SnipStatus>("idle");
   const { pressCount, lastPressedAt } = useHotkeyStore();
 
   useEffect(() => {
@@ -30,7 +35,8 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    let off: UnlistenFn | undefined;
+    let offComplete: UnlistenFn | undefined;
+    let offState: UnlistenFn | undefined;
 
     listen<SnipResult>("snip-complete", (event) => {
       if (cancelled) return;
@@ -38,27 +44,42 @@ export default function App() {
     })
       .then((fn) => {
         if (cancelled) fn();
-        else off = fn;
+        else offComplete = fn;
       })
-      .catch((err) => console.error("[main] snip-complete listen failed", err));
+      .catch((err) =>
+        console.error("[main] snip-complete listen failed", err),
+      );
+
+    listen<SnipStatus>("snip-state", (event) => {
+      if (cancelled) return;
+      setSnipStatus(event.payload);
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else offState = fn;
+      })
+      .catch((err) =>
+        console.error("[main] snip-state listen failed", err),
+      );
 
     return () => {
       cancelled = true;
-      off?.();
+      offComplete?.();
+      offState?.();
     };
   }, []);
 
+  const snipping = snipStatus !== "idle" && snipStatus !== "error";
+
   const handleSnip = async () => {
     if (snipping) return;
-    setSnipping(true);
     try {
       const result = await tauri.runSnip();
       if (result.status === "cancelled") toast("Snip cancelled");
       // On success Rust emits `snip-complete` → PreviewWindow renders.
+      // `snip-state` events handle button label across the whole flow.
     } catch (err) {
       toast.error("Snip failed", { description: String(err) });
-    } finally {
-      setSnipping(false);
     }
   };
 
@@ -81,7 +102,11 @@ export default function App() {
           className="mx-auto inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
         >
           <Camera className="size-4" />
-          {snipping ? "Capturing…" : "Snip now"}
+          {snipStatus === "capturing"
+            ? "Capturing…"
+            : snipStatus === "processing"
+            ? "Processing…"
+            : "Snip now"}
         </button>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           Or press{" "}

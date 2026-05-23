@@ -1,22 +1,71 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Toaster } from "sonner";
 import { useHistoryStore } from "@/stores/history-store";
+import { HistoryRow } from "@/components/history-row";
 import { strings } from "@/strings";
 
 export default function HistoryWindow() {
   const items = useHistoryStore((s) => s.items);
   const search = useHistoryStore((s) => s.search);
   const setSearch = useHistoryStore((s) => s.setSearch);
+  const loading = useHistoryStore((s) => s.loading);
+  const error = useHistoryStore((s) => s.error);
+  const load = useHistoryStore((s) => s.load);
+  const remove = useHistoryStore((s) => s.remove);
+  const rerun = useHistoryStore((s) => s.rerun);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return items;
-    const q = search.toLowerCase();
-    return items.filter((it) => it.text.toLowerCase().includes(q));
-  }, [items, search]);
+  // Initial load — when the webview first mounts.
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Tauri spawns each window as its own webview with isolated JS state.
+  // The preview-window's store can't update this window's store directly,
+  // so we refetch from SQLite whenever Rust emits `snip-complete` (a fresh
+  // record just landed) and whenever this window becomes visible again
+  // (the close button hides it instead of destroying it, so the mount
+  // effect doesn't re-run on next show).
+  useEffect(() => {
+    let cancelled = false;
+    let offSnip: UnlistenFn | undefined;
+    let offFocus: UnlistenFn | undefined;
+
+    listen("snip-complete", () => {
+      if (!cancelled) void load();
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else offSnip = fn;
+      })
+      .catch((err) =>
+        console.error("[history] snip-complete listen failed", err),
+      );
+
+    getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused && !cancelled) void load();
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else offFocus = fn;
+      })
+      .catch((err) =>
+        console.error("[history] focus listen failed", err),
+      );
+
+    return () => {
+      cancelled = true;
+      offSnip?.();
+      offFocus?.();
+    };
+  }, [load]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({
-    count: filtered.length,
+    count: items.length,
     getScrollElement: () => listRef.current,
     estimateSize: () => 96,
     overscan: 6,
@@ -35,9 +84,18 @@ export default function HistoryWindow() {
           placeholder={strings.history.searchPlaceholder}
           className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm placeholder:text-slate-400 focus:border-slate-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"
         />
+        {error && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
       </header>
 
-      {filtered.length === 0 ? (
+      {loading && items.length === 0 ? (
+        <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
+          Loading history…
+        </p>
+      ) : items.length === 0 ? (
         <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
           {strings.history.empty}
         </p>
@@ -51,38 +109,29 @@ export default function HistoryWindow() {
             }}
           >
             {virtualizer.getVirtualItems().map((row) => {
-              const item = filtered[row.index];
+              const item = items[row.index];
               return (
-                <article
+                <div
                   key={item.id}
-                  className="absolute inset-x-0 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+                  className="absolute inset-x-0"
                   style={{
                     transform: `translateY(${row.start}px)`,
                     height: row.size,
                   }}
                 >
-                  <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    <span>{new Date(item.createdAt).toLocaleString()}</span>
-                    {item.agent && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {item.agent}
-                      </span>
-                    )}
-                    {item.detected && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {item.detected.replace("_", " ").toLowerCase()}
-                      </span>
-                    )}
-                  </div>
-                  <p className="line-clamp-2 font-mono text-xs text-slate-700 dark:text-slate-300">
-                    {item.text}
-                  </p>
-                </article>
+                  <HistoryRow
+                    item={item}
+                    onDelete={remove}
+                    onRerun={rerun}
+                  />
+                </div>
               );
             })}
           </div>
         </div>
       )}
+
+      <Toaster richColors closeButton position="bottom-right" />
     </main>
   );
 }
