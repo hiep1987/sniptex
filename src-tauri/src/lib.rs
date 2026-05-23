@@ -34,6 +34,25 @@ pub fn run() {
         .plugin(hotkey::build_plugin());
 
     builder
+        .on_window_event(|window, event| {
+            // Without this, clicking the X on Settings / History /
+            // Onboarding destroys the webview. Subsequent
+            // `get_webview_window("settings")` calls return None and the
+            // tray + main-window buttons become no-ops. Intercept the
+            // close request and hide instead so the same handle stays
+            // valid for the next show.
+            //
+            // The `overlay` and `preview` windows already use
+            // programmatic hide() and never receive a user-driven close
+            // (no decorations), so the intercept is a no-op for them.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if matches!(label, "main" | "settings" | "history" | "onboarding") {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(desktop)]
             {

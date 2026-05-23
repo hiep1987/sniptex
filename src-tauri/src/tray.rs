@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::state::{AppState, TrayStatus};
 
 // Tray menu event ids. Frontend listens for the matching tauri events.
+const MENU_SHOW_MAIN: &str = "show-main";
 const MENU_SNIP_NOW: &str = "snip-now";
 const MENU_SHOW_HISTORY: &str = "show-history";
 const MENU_OPEN_SETTINGS: &str = "open-settings";
@@ -40,6 +41,7 @@ fn icon_for(status: TrayStatus) -> tauri::Result<Image<'static>> {
 /// Build the tray icon, menu, and click handlers, and store the handle
 /// in `AppState` so `set_status` can swap the icon later.
 pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
+    let show_main = MenuItemBuilder::with_id(MENU_SHOW_MAIN, "Show SnipTeX").build(app)?;
     let snip_now = MenuItemBuilder::with_id(MENU_SNIP_NOW, "Snip Now")
         .accelerator("CmdOrCtrl+Shift+M")
         .build(app)?;
@@ -52,7 +54,9 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
 
     let menu = MenuBuilder::new(app)
+        .item(&show_main)
         .item(&snip_now)
+        .item(&separator)
         .item(&show_history)
         .item(&open_settings)
         .item(&separator)
@@ -67,6 +71,9 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip(TrayStatus::Idle.tooltip())
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            MENU_SHOW_MAIN => {
+                show_window_by_label(app, "main");
+            }
             MENU_SNIP_NOW => {
                 let _ = app.emit(TRAY_SNIP_NOW_EVENT, ());
             }
