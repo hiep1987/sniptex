@@ -1,9 +1,5 @@
-//! Strip LLM scaffolding (preambles, fences, sign-offs, leaked category
-//! labels) so downstream consumers see only the OCR body.
-//!
-//! Defensive against agents that occasionally ignore the prompt's
-//! "do not emit category name" rule — see test
-//! `post_process_strips_leading_category_label`.
+//! Strip LLM scaffolding (preambles, fences, sign-offs, leaked thinking
+//! transcripts) so downstream consumers see only the OCR body.
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -43,14 +39,60 @@ fn leading_category_label_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"(?m)\A\s*(?:MIXED|EQUATION_ONLY|TABLE_ONLY)\s*\n+").unwrap())
 }
 
+fn thinking_marker_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(?:>(?:thought|instruction|reasoning|planning)|mekthought|section\}|CRITICAL INSTRUCTION|The user asked|I need to |I should |The image (?:has been|shows|contains)|The category is|Silently classify)").unwrap()
+    })
+}
+
+fn ocr_content_start_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?m)^(?:\*{0,2}(?:Câu|Bài|Ví dụ|Cho|Tìm|Xét|Trong|Gọi|Biết|Phương trình|Đường|Mặt|Hàm số|Tập|Giá trị|Số|Với|Một|Hai|Ba|Hỏi|Bao|Khi|Nếu|Có|Đề|Mốt|Trung bình|Phương sai)|\|[- ]|#{1,3} |\$\$|\\begin\{|\[UNREADABLE\])").unwrap()
+    })
+}
+
+fn leading_junk_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\A[.\s\d>]*\n").unwrap())
+}
+
+/// Strip thinking/reasoning transcript from Gemini CLI output.
+/// Strategy: if the output contains thinking markers, find the last
+/// paragraph boundary before actual OCR content starts and discard
+/// everything above it.
+fn strip_thinking_transcript(raw: &str) -> String {
+    if !thinking_marker_re().is_match(raw) {
+        return raw.to_string();
+    }
+
+    let content_re = ocr_content_start_re();
+    if let Some(m) = content_re.find(raw) {
+        let before = &raw[..m.start()];
+        let last_boundary = before.rfind("\n\n").map(|i| i + 2)
+            .or_else(|| before.rfind('\n').map(|i| i + 1))
+            .unwrap_or(m.start());
+        return raw[last_boundary..].to_string();
+    }
+
+    raw.to_string()
+}
+
 pub fn post_process(raw: &str) -> String {
     let mut s = raw.trim().to_string();
+
+    // 0. Strip thinking/reasoning transcripts (Gemini CLI).
+    s = strip_thinking_transcript(&s);
+    s = s.trim().to_string();
 
     // 1. Strip leaked category labels from the very top.
     s = leading_category_label_re().replace(&s, "").to_string();
 
-    // 2. Strip a preamble line if present (only the first line, only if it
-    //    starts with a known preamble — keeps real content intact).
+    // 1b. Strip stray leading junk (dots, spaces, digits).
+    s = leading_junk_re().replace(&s, "").to_string();
+
+    // 2. Strip a preamble line if present.
     for p in PREAMBLES {
         if s.starts_with(p) {
             if let Some(idx) = s.find('\n') {
@@ -62,10 +104,9 @@ pub fn post_process(raw: &str) -> String {
         }
     }
 
-    // 3. Strip opening/closing code fences (``` / ```markdown / ```latex / ```md / ```tex).
+    // 3. Strip opening/closing code fences.
     s = opening_fence_re().replace(&s, "").to_string();
     s = closing_fence_re().replace(&s, "").to_string();
-    // Edge case: file is wrapped in bare ``` ... ``` on first/last line.
     if let Some(rest) = s.strip_prefix("```\n") {
         s = rest.to_string();
     }
@@ -82,4 +123,81 @@ pub fn post_process(raw: &str) -> String {
     }
 
     s.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_gemini_thinking_with_numbered_marker() {
+        let input = "-894>thought\nThe image has been provided. Let me analyze it.\nThe category is MIXED.\nI need to format it properly.\n\n**Câu 10.** Đồ thị hàm số $y=\\frac{2x}{4}$\n\nA. $y=2x+6$.";
+        let result = post_process(input);
+        assert!(result.starts_with("**Câu 10.**"), "got: {result}");
+        assert!(!result.contains("thought"));
+        assert!(!result.contains("category"));
+    }
+
+    #[test]
+    fn strips_mekthought_with_prompt_echo() {
+        let input = "mekthought\nCRITICAL INSTRUCTION 1: ALWAYS prioritize.\nThe user asked me to convert the image.\nThis is a MIXED category.\nOutput Markdown.\nInline math: $...$\nDo NOT translate.\nMath symbols: use standard LaTeX.\n\n**Câu 6.** Trong không gian $Oxyz$";
+        let result = post_process(input);
+        assert!(result.starts_with("**Câu 6.**"), "got: {result}");
+    }
+
+    #[test]
+    fn strips_leading_dot() {
+        let input = ".\n**Câu 4.** Trong không gian";
+        let result = post_process(input);
+        assert!(result.starts_with("**Câu 4.**"), "got: {result}");
+    }
+
+    #[test]
+    fn strips_section_prefix() {
+        let input = "section}\nCho hàm số $y=x^2$.";
+        let result = post_process(input);
+        assert!(result.starts_with("Cho hàm số"), "got: {result}");
+    }
+
+    #[test]
+    fn preserves_clean_ocr() {
+        let input = "**Câu 4.** Trong không gian $Oxyz$\n\nA. $M(3;5;-2)$.";
+        let result = post_process(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn strips_category_label() {
+        let input = "MIXED\n\n**Câu 4.** Nội dung";
+        let result = post_process(input);
+        assert!(result.starts_with("**Câu 4.**"), "got: {result}");
+    }
+
+    #[test]
+    fn strips_verbose_reasoning_before_table() {
+        let input = "I should classify this as TABLE_ONLY.\nThe image contains a table.\nLet me format it.\n\n| A | B |\n|---|---|\n| 1 | 2 |";
+        let result = post_process(input);
+        assert!(result.starts_with("| A | B |"), "got: {result}");
+    }
+
+    #[test]
+    fn strips_thinking_before_latex() {
+        let input = "42>thought\nI need to extract the equation.\n\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$";
+        let result = post_process(input);
+        assert!(result.starts_with("$$\\int"), "got: {result}");
+    }
+
+    #[test]
+    fn no_false_positive_on_clean_vietnamese() {
+        let input = "Trong không gian $Oxyz$, cho điểm $A(1;2;3)$.";
+        let result = post_process(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn handles_thinking_without_double_newline() {
+        let input = "-5>thought\nThe image shows a math problem.\nCâu 4. Tìm $x$ sao cho $x^2=4$.";
+        let result = post_process(input);
+        assert!(result.starts_with("Câu 4."), "got: {result}");
+    }
 }

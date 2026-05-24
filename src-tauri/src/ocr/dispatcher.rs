@@ -1,7 +1,7 @@
 //! Async OCR dispatcher.
 //!
 //! Branches on `AgentKind`:
-//!   * `CliBin` — spawns the binary with `kill_on_drop(true)` and a 30s budget.
+//!   * `CliBin` — spawns the binary with `kill_on_drop(true)` and a 90s budget.
 //!     Codex captures clean output via `--output-last-message`; other CLIs use stdout.
 //!   * `CloudApi` — calls the in-process HTTPS adapter.
 //!
@@ -23,11 +23,12 @@ use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
 use crate::agents::keychain;
 use crate::agents::registry::{
     build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CODEX_ID, DEFAULT_FALLBACK_CHAIN,
+    GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::MASTER_PROMPT;
 
-const DISPATCH_TIMEOUT: Duration = Duration::from_secs(30);
+const DISPATCH_TIMEOUT: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Error)]
 pub enum DispatchError {
@@ -112,6 +113,12 @@ async fn run_cli_agent(agent: &AgentInfo, image_path: &str) -> Result<String, Di
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
+    if agent.spec.id == GEMINI_CLI_ID {
+        if let Some(home) = dirs::home_dir() {
+            cmd.current_dir(home);
+        }
+    }
+
     let output = match timeout(DISPATCH_TIMEOUT, cmd.output()).await {
         Ok(Ok(out)) => out,
         Ok(Err(e)) => return Err(DispatchError::Io(e.to_string())),
@@ -129,8 +136,6 @@ async fn run_cli_agent(agent: &AgentInfo, image_path: &str) -> Result<String, Di
         });
     }
 
-    // Codex writes its clean assistant reply to the --output-last-message
-    // file; prefer that over stdout (which carries session scaffolding).
     let raw = if let Some(guard) = &last_msg_guard {
         match tokio::fs::read_to_string(guard.path()).await {
             Ok(s) if !s.trim().is_empty() => s,

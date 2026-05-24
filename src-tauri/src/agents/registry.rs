@@ -104,10 +104,6 @@ pub fn build_command_args(
             args
         }
         GEMINI_CLI_ID => {
-            // `--approval-mode plan` makes the agent loop read-only, which
-            // prevents the `read_file ~/.claude/.ck.json` failure surfaced
-            // in Phase 1. Gemini CLI 0.42 made `--yolo` and `--approval-mode`
-            // mutually exclusive, so plan-mode is the entire safety contract.
             vec![
                 "-p".into(),
                 format!("{prompt}\n@\"{image_path}\""),

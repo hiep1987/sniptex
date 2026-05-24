@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Copy, RotateCw, Trash2 } from "lucide-react";
+import { Copy, Loader2, RotateCw, Trash2 } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { toast } from "sonner";
 import type { HistoryItem } from "@/stores/history-store";
@@ -9,11 +9,13 @@ import { RerunMenu } from "./rerun-menu";
 type Props = {
   item: HistoryItem;
   onDelete: (id: number) => void | Promise<void>;
-  onRerun: (id: number, agentId: string) => unknown | Promise<unknown>;
+  onRerun: (id: number, agentId: string) => Promise<HistoryItem>;
 };
 
 export function HistoryRow({ item, onDelete, onRerun }: Props) {
   const [rerunOpen, setRerunOpen] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
+  const rerunBtnRef = useRef<HTMLButtonElement | null>(null);
   const thumbSrc = useMemo(
     () => (item.thumb_path ? convertFileSrc(item.thumb_path) : null),
     [item.thumb_path],
@@ -66,7 +68,7 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
         </p>
       </div>
 
-      <div className="relative flex shrink-0 flex-col items-end gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+      <div className={`relative flex shrink-0 flex-col items-end gap-1 transition focus-within:opacity-100 ${rerunOpen || rerunning ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         <button
           type="button"
           onClick={handleCopy}
@@ -76,12 +78,18 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
           <Copy className="size-3.5" />
         </button>
         <button
+          ref={rerunBtnRef}
           type="button"
           onClick={() => setRerunOpen((v) => !v)}
-          title="Rerun with another agent"
-          className="inline-flex size-7 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          disabled={rerunning}
+          title={rerunning ? "Rerunning…" : "Rerun with another agent"}
+          className="inline-flex size-7 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-wait dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         >
-          <RotateCw className="size-3.5" />
+          {rerunning ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RotateCw className="size-3.5" />
+          )}
         </button>
         <button
           type="button"
@@ -94,11 +102,22 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
 
         {rerunOpen && (
           <RerunMenu
+            anchorEl={rerunBtnRef.current}
             currentAgent={item.agent}
             onClose={() => setRerunOpen(false)}
             onPick={async (agentId) => {
               setRerunOpen(false);
-              await onRerun(item.id, agentId);
+              setRerunning(true);
+              try {
+                const result = await onRerun(item.id, agentId);
+                if (result) {
+                  toast.success(`Rerun complete with ${result.agent}`);
+                }
+              } catch (err) {
+                toast.error("Rerun failed", { description: String(err) });
+              } finally {
+                setRerunning(false);
+              }
             }}
           />
         )}

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 
 type AgentInfoDto = {
@@ -12,15 +13,23 @@ type AgentInfoDto = {
 };
 
 type Props = {
+  anchorEl: HTMLElement | null;
   currentAgent: string;
   onClose: () => void;
   onPick: (agentId: string) => void | Promise<void>;
 };
 
-export function RerunMenu({ currentAgent, onClose, onPick }: Props) {
+export function RerunMenu({ anchorEl, currentAgent, onClose, onPick }: Props) {
   const [agents, setAgents] = useState<AgentInfoDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.right });
+  }, [anchorEl]);
 
   useEffect(() => {
     invoke<AgentInfoDto[]>("detect_agents")
@@ -28,15 +37,11 @@ export function RerunMenu({ currentAgent, onClose, onPick }: Props) {
       .catch((err) => setError(String(err)));
   }, []);
 
-  // Close on outside click — defensive UX so the floating menu doesn't
-  // strand itself when the user clicks somewhere else in the list.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!rootRef.current) return;
       if (!rootRef.current.contains(e.target as Node)) onClose();
     };
-    // Schedule attach so the click that opened the menu doesn't
-    // immediately close it.
     const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
     return () => {
       clearTimeout(t);
@@ -44,10 +49,13 @@ export function RerunMenu({ currentAgent, onClose, onPick }: Props) {
     };
   }, [onClose]);
 
-  return (
+  if (!pos) return null;
+
+  const menu = (
     <div
       ref={rootRef}
-      className="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-100%)" }}
+      className="z-50 min-w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
     >
       <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Rerun with
@@ -67,7 +75,7 @@ export function RerunMenu({ currentAgent, onClose, onPick }: Props) {
             type="button"
             disabled={disabled}
             onClick={() => void onPick(a.spec.id)}
-            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex w-full cursor-pointer items-center justify-between rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
             title={disabled ? "Already used for this snip" : ""}
           >
             <span>{a.spec.display_name}</span>
@@ -81,4 +89,6 @@ export function RerunMenu({ currentAgent, onClose, onPick }: Props) {
       })}
     </div>
   );
+
+  return createPortal(menu, document.body);
 }

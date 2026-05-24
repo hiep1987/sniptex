@@ -786,6 +786,10 @@ pub async fn rerun_snip(
     };
 
     let image_path = record.image_path.clone();
+    if !std::path::Path::new(&image_path).exists() {
+        return Err(format!("image missing: {image_path}"));
+    }
+    log::info!("[rerun] record={record_id} agent={agent_id} image={image_path}");
     let started = Instant::now();
     let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path).await?;
     let latency_ms = started.elapsed().as_millis() as i64;

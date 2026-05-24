@@ -29,7 +29,7 @@ export type HistoryState = {
   setSearch: (q: string) => void;
   push: (item: HistoryItem) => void;
   remove: (id: number) => Promise<void>;
-  rerun: (id: number, agentId: string) => Promise<HistoryItem | null>;
+  rerun: (id: number, agentId: string) => Promise<HistoryItem>;
   clear: () => void;
 };
 
@@ -82,16 +82,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   async rerun(id, agentId) {
-    try {
-      const refreshed = await tauri.rerunSnip(id, agentId);
-      set((s) => ({
-        items: s.items.map((it) => (it.id === id ? refreshed : it)),
-      }));
-      return refreshed;
-    } catch (err) {
-      set({ error: String(err) });
-      return null;
-    }
+    const refreshed = await tauri.rerunSnip(id, agentId);
+    set((s) => ({
+      items: s.items.map((it) => (it.id === id ? refreshed : it)),
+    }));
+    return refreshed;
   },
 
   clear() {
