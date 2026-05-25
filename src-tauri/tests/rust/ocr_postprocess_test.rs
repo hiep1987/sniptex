@@ -59,3 +59,10 @@ fn post_process_preserves_vietnamese_diacritics() {
     let out = post_process(raw);
     assert_eq!(out, raw);
 }
+
+#[test]
+fn post_process_preserves_numeric_first_line() {
+    let raw = "1\n2\n3";
+    let out = post_process(raw);
+    assert_eq!(out, raw);
+}

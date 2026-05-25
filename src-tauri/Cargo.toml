@@ -71,6 +71,10 @@ name = "agent_registry_argv"
 path = "tests/rust/agent_registry_argv_test.rs"
 
 [[test]]
+name = "gemini_cli_output"
+path = "tests/rust/gemini_cli_output_test.rs"
+
+[[test]]
 name = "storage_history"
 path = "tests/rust/storage_history_test.rs"
 

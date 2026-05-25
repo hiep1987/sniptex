@@ -32,14 +32,23 @@ fn codex_argv_omits_output_last_message_flag_when_none() {
 }
 
 #[test]
-fn gemini_cli_uses_plan_approval_mode_gate() {
+fn gemini_cli_uses_interactive_like_headless_prompt() {
     let args = build_command_args(GEMINI_CLI_ID, "/tmp/img.png", "PROMPT", None);
-    // Plan mode is the entire safety contract — no --yolo, no other
-    // approval modes. Drift here re-opens the Phase-1 tool-loop failure.
-    assert!(args.contains(&"--approval-mode".to_string()));
-    assert!(args.contains(&"plan".to_string()));
+    let prompt = args
+        .windows(2)
+        .find(|pair| pair[0] == "-p")
+        .map(|pair| pair[1].as_str())
+        .expect("gemini-cli should receive a prompt");
+    assert_eq!(prompt, "PROMPT @\"/tmp/img.png\"");
+    assert!(!args.iter().any(|a| a == "--approval-mode"));
+    assert!(args.iter().any(|arg| arg == "--skip-trust"));
+    assert!(args
+        .windows(2)
+        .any(|pair| pair == ["--include-directories", "/tmp"]));
+    assert!(args.windows(2).any(|pair| pair == ["--output-format", "text"]));
+    assert!(args.windows(2).any(|pair| pair == ["-e", "none"]));
+    assert!(!args.iter().any(|a| a == "--session-id"));
     assert!(!args.iter().any(|a| a == "--yolo" || a == "-y"));
-    assert!(args.iter().any(|a| a.contains("@\"/tmp/img.png\"")));
 }
 
 #[test]

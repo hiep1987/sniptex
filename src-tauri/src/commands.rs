@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::agents::{
     self, keychain,
-    registry::{AgentInfo, CLOUD_GEMINI_ID},
+    registry::{AgentInfo, CLOUD_GEMINI_ID, GEMINI_CLI_ID},
 };
 use crate::capture::{
     capture_active_monitor, crop_region_to_temp_png, CaptureError, CropError, MonitorSnapshot,
@@ -793,6 +793,10 @@ pub async fn rerun_snip(
     let started = Instant::now();
     let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path).await?;
     let latency_ms = started.elapsed().as_millis() as i64;
+    if used_agent == GEMINI_CLI_ID {
+        ocr::validate_rerun_consistency(&record.output_text, &text)
+            .map_err(|reason| format!("gemini-cli output rejected: {reason}"))?;
+    }
     let detected = ocr::detect_type(&text);
     let detected_str = detected_to_string(&detected);
 

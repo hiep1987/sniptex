@@ -42,20 +42,20 @@ fn leading_category_label_re() -> &'static Regex {
 fn thinking_marker_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(?:>(?:thought|instruction|reasoning|planning)|mekthought|section\}|CRITICAL INSTRUCTION|The user asked|I need to |I should |The image (?:has been|shows|contains)|The category is|Silently classify)").unwrap()
+        Regex::new(r"(?i)(?:>(?:thought|instruction|reasoning|planning)|mekthought|section\}|CRITICAL INSTRUCTION|The user asked|I can see|I need to |I should |The image (?:has been|shows|contains)|The category is|Silently classify)").unwrap()
     })
 }
 
 fn ocr_content_start_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?m)^(?:\*{0,2}(?:Câu|Bài|Ví dụ|Cho|Tìm|Xét|Trong|Gọi|Biết|Phương trình|Đường|Mặt|Hàm số|Tập|Giá trị|Số|Với|Một|Hai|Ba|Hỏi|Bao|Khi|Nếu|Có|Đề|Mốt|Trung bình|Phương sai)|\|[- ]|#{1,3} |\$\$|\\begin\{|\[UNREADABLE\])").unwrap()
+        Regex::new(r#"(?m)^(?:"|Let's do this directly\.)?(?:\*{0,2}(?:Câu|Bài|Ví dụ|Cho|Tìm|Xét|Trong|Gọi|Biết|Phương trình|Đường|Mặt|Hàm số|Tập|Giá trị|Số|Với|Một|Hai|Ba|Hỏi|Bao|Khi|Nếu|Có|Đề|Mốt|Trung bình|Phương sai)|\|[- ]|#{1,3} |\$\$|\\begin\{|\[UNREADABLE\])"#).unwrap()
     })
 }
 
 fn leading_junk_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\A[.\s\d>]*\n").unwrap())
+    RE.get_or_init(|| Regex::new(r"\A[.>\s]+\n").unwrap())
 }
 
 /// Strip thinking/reasoning transcript from Gemini CLI output.
@@ -65,6 +65,10 @@ fn leading_junk_re() -> &'static Regex {
 fn strip_thinking_transcript(raw: &str) -> String {
     if !thinking_marker_re().is_match(raw) {
         return raw.to_string();
+    }
+
+    if let Some(idx) = raw.rfind("Let's do this directly.") {
+        return raw[idx..].to_string();
     }
 
     let content_re = ocr_content_start_re();
@@ -89,8 +93,17 @@ pub fn post_process(raw: &str) -> String {
     // 1. Strip leaked category labels from the very top.
     s = leading_category_label_re().replace(&s, "").to_string();
 
-    // 1b. Strip stray leading junk (dots, spaces, digits).
+    // 1b. Strip stray leading punctuation junk.
     s = leading_junk_re().replace(&s, "").to_string();
+    if let Some(rest) = s.strip_prefix("Let's do this directly.") {
+        s = rest.trim_start().to_string();
+    }
+    if let Some(rest) = s.strip_prefix('"') {
+        s = rest.trim_start().to_string();
+    }
+    if let Some(head) = s.strip_suffix('"') {
+        s = head.trim_end().to_string();
+    }
 
     // 2. Strip a preamble line if present.
     for p in PREAMBLES {
@@ -199,5 +212,14 @@ mod tests {
         let input = "-5>thought\nThe image shows a math problem.\nCâu 4. Tìm $x$ sao cho $x^2=4$.";
         let result = post_process(input);
         assert!(result.starts_with("Câu 4."), "got: {result}");
+    }
+
+    #[test]
+    fn strips_gemini_cli_image_read_scaffold() {
+        let input = ".  I can see the image now.\nThe image contains the following text:\n\"Câu 1. Tiệm cận đứng của đồ thị hàm số $y=\\frac{x^2+4x+1}{x-1}$ là\nA. $y=1$.\"\n\nThe user asked to OCR the image.\n\nLet's do this directly.Câu 1. Tiệm cận đứng của đồ thị hàm số $y=\\frac{x^2+4x+1}{x-1}$ là\nA. $y=1$.";
+        let result = post_process(input);
+        assert!(result.starts_with("Câu 1."), "got: {result}");
+        assert!(!result.contains("I can see"));
+        assert!(!result.contains("The user asked"));
     }
 }

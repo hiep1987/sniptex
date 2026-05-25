@@ -167,3 +167,15 @@ END;
 
 <!-- Updated: Validation Session 1 - keep-forever image retention -->
 <!-- Updated: 2026-05-23 - Implementation complete; live smoke test pending -->
+
+## Validation Notes (2026-05-24)
+
+- Gemini CLI rerun hardening completed in `plans/260524-1304-gemini-cli-clean-rerun-output-fix/`.
+- Automated validation passed: focused Rust tests, full Rust suite, TypeScript compile, and `history_smoke`.
+- Added Gemini-only rerun consistency validation before DB update. It rejects mismatched problem labels and low-overlap OCR text, so plausible but unrelated Gemini output does not overwrite the selected History row.
+- Live CLI fixture validation:
+  - Codex passed equation-only and table-only fixtures.
+  - Gemini CLI passed one table fixture and was rejected at dispatcher level on one equation-only fixture because tool use was detected.
+  - Additional app-data image validation confirmed the saved image path was correct. Final Gemini CLI contract uses text output, one-line prompt with `@path`, neutral cwd, and include-dir scoped to the image parent; the Câu 1 fixture passed with this shape.
+  - Gemini CLI remains removed from automatic fallback but can be selected manually for History rerun behind consistency validation.
+- Full GUI History rerun smoke remains pending: run the app, rerun an existing history row with Codex, Gemini Vision API, and Gemini CLI, and confirm successful rows update while failed reruns leave the row unchanged.

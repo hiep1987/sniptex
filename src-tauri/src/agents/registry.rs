@@ -67,9 +67,10 @@ pub const AGENTS: &[AgentSpec] = &[
 ];
 
 /// Default fallback order: Codex first (most reliable per Session-3),
-/// then cloud Gemini (no local install required), then CLI Gemini.
-pub const DEFAULT_FALLBACK_CHAIN: &[&str] =
-    &[CODEX_ID, CLOUD_GEMINI_ID, GEMINI_CLI_ID];
+/// then cloud Gemini (no local install required). Gemini CLI is omitted
+/// because live OCR validation showed it can return unrelated content
+/// while also invoking tools/skills in headless mode.
+pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID];
 
 pub fn spec_by_id(id: &str) -> Option<&'static AgentSpec> {
     AGENTS.iter().find(|a| a.id == id)
@@ -106,12 +107,32 @@ pub fn build_command_args(
         GEMINI_CLI_ID => {
             vec![
                 "-p".into(),
-                format!("{prompt}\n@\"{image_path}\""),
-                "--approval-mode".into(),
-                "plan".into(),
+                gemini_cli_prompt(prompt, image_path),
+                "--skip-trust".into(),
+                "--include-directories".into(),
+                image_parent_dir(image_path),
+                "--output-format".into(),
+                "text".into(),
+                "-e".into(),
+                "none".into(),
             ]
         }
         CLOUD_GEMINI_ID => Vec::new(),
         other => panic!("Unknown agent id: {other}"),
     }
+}
+
+fn gemini_cli_prompt(prompt: &str, image_path: &str) -> String {
+    format!(
+        "{} @\"{}\"",
+        prompt.trim_end_matches('.'),
+        image_path
+    )
+}
+
+fn image_parent_dir(image_path: &str) -> String {
+    std::path::Path::new(image_path)
+        .parent()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string())
 }

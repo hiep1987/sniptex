@@ -82,11 +82,17 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   async rerun(id, agentId) {
-    const refreshed = await tauri.rerunSnip(id, agentId);
-    set((s) => ({
-      items: s.items.map((it) => (it.id === id ? refreshed : it)),
-    }));
-    return refreshed;
+    try {
+      const refreshed = await tauri.rerunSnip(id, agentId);
+      set((s) => ({
+        items: s.items.map((it) => (it.id === id ? refreshed : it)),
+        error: null,
+      }));
+      return refreshed;
+    } catch (err) {
+      set({ error: String(err) });
+      throw err;
+    }
   },
 
   clear() {

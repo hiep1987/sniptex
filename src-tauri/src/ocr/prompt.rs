@@ -4,6 +4,13 @@
 //! category detection + table-cell math-scope rule). Any change here must be
 //! mirrored to the bash test harness so prompt validation results stay
 //! comparable across CLI sweeps.
+//!
+//! Gemini CLI headless is deliberately excluded from this prompt. Live
+//! validation showed this procedural contract (classification, format
+//! branches, examples, strict rules) can push `gemini -p` into agentic
+//! planning/tool behavior and stale output even when `@file` image loading
+//! works. Keep Gemini CLI on `GEMINI_CLI_PROMPT` unless hard fixtures prove a
+//! richer prompt remains stable in headless mode.
 
 pub const MASTER_PROMPT: &str = "You are an OCR engine. Convert the image to text following these rules.
 
@@ -46,3 +53,6 @@ STRICT RULES:
 - Preserve fractions as \\frac{}{}, exponents as ^{}, subscripts as _{}
 
 Begin output now:";
+
+pub const GEMINI_CLI_PROMPT: &str =
+    "Chuyển toàn bộ nội dung ảnh sang LaTeX. Chỉ xuất LaTeX, không giải thích.";
