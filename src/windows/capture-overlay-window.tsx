@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import {
+  CaptureCrosshair,
+  SelectionFrame,
+  type CapturePoint,
+  type CaptureRect,
+} from "@/components/capture-overlay-guides";
 
 type CaptureStart = {
   backdrop_path: string;
@@ -11,7 +17,8 @@ type CaptureStart = {
   scale_factor: number;
 };
 
-type Rect = { x: number; y: number; w: number; h: number };
+type Rect = CaptureRect;
+type Point = CapturePoint;
 
 const CAPTURE_START = "capture-start";
 const CAPTURE_REGION = "capture-region";
@@ -21,9 +28,8 @@ export default function CaptureOverlayWindow() {
   const [backdrop, setBackdrop] = useState<string | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [drag, setDrag] = useState<Rect | null>(null);
+  const [pointer, setPointer] = useState<Point | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
-  // Mirror `drag` into a ref so the keydown handler can read the latest
-  // selection without re-binding on every mouse-move tick.
   const dragRef = useRef<Rect | null>(null);
   dragRef.current = drag;
 
@@ -36,6 +42,7 @@ export default function CaptureOverlayWindow() {
       setBackdrop(convertFileSrc(p.backdrop_path));
       setSize({ w: p.logical_width, h: p.logical_height });
       setDrag(null);
+      setPointer({ x: p.logical_width / 2, y: p.logical_height / 2 });
       dragStart.current = null;
     })
       .then((fn) => {
@@ -84,11 +91,13 @@ export default function CaptureOverlayWindow() {
 
   function onMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return;
+    setPointer({ x: e.clientX, y: e.clientY });
     dragStart.current = { x: e.clientX, y: e.clientY };
     setDrag({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
   }
 
   function onMouseMove(e: React.MouseEvent) {
+    setPointer({ x: e.clientX, y: e.clientY });
     if (!dragStart.current) return;
     const { x: sx, y: sy } = dragStart.current;
     const x = Math.min(sx, e.clientX);
@@ -127,47 +136,12 @@ export default function CaptureOverlayWindow() {
           pointerEvents: "none",
         }}
       />
-      {/* Dim mask over the whole screen; the selection cuts a hole via box-shadow. */}
       <div style={dimMaskStyle(drag)} />
+      {pointer && <CaptureCrosshair point={pointer} />}
       {drag && drag.w > 0 && drag.h > 0 && (
         <SelectionFrame rect={drag} />
       )}
     </div>
-  );
-}
-
-function SelectionFrame({ rect }: { rect: Rect }) {
-  return (
-    <>
-      <div
-        style={{
-          position: "absolute",
-          left: rect.x,
-          top: rect.y,
-          width: rect.w,
-          height: rect.h,
-          border: "1.5px solid rgb(59, 130, 246)",
-          boxSizing: "border-box",
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: rect.x + 4,
-          top: Math.max(0, rect.y - 22),
-          padding: "2px 6px",
-          fontSize: 11,
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          color: "white",
-          background: "rgba(59, 130, 246, 0.9)",
-          borderRadius: 3,
-          pointerEvents: "none",
-        }}
-      >
-        {Math.round(rect.w)} × {Math.round(rect.h)}
-      </div>
-    </>
   );
 }
 
@@ -178,13 +152,12 @@ const fullscreenContainerStyle: React.CSSProperties = {
   height: "100vh",
   margin: 0,
   padding: 0,
-  cursor: "crosshair",
+  cursor: "none",
   overflow: "hidden",
   background: "transparent",
 };
 
 function dimMaskStyle(rect: Rect | null): React.CSSProperties {
-  // No selection yet → dim the whole screen uniformly.
   if (!rect || rect.w === 0 || rect.h === 0) {
     return {
       position: "absolute",
@@ -193,8 +166,6 @@ function dimMaskStyle(rect: Rect | null): React.CSSProperties {
       pointerEvents: "none",
     };
   }
-  // With a selection, use a giant inset box-shadow to dim everything outside
-  // the rect — single element, no four-strip math, GPU-cheap.
   return {
     position: "absolute",
     left: rect.x,

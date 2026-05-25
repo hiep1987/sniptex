@@ -35,7 +35,7 @@ body.overlay-window #root {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  cursor: crosshair;
+  cursor: none;
 }
 
 /* Preview window is a floating frameless surface. Drop the body
