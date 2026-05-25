@@ -21,25 +21,44 @@ export function useSnipResult(): SnipEvent | null {
 
   useEffect(() => {
     let cancelled = false;
-    let off: UnlistenFn | undefined;
+    let offSnip: UnlistenFn | undefined;
+    let offHistory: UnlistenFn | undefined;
     let seq = 0;
 
-    listen<SnipResult>("snip-complete", (e) => {
+    const handleResult = (result: SnipResult) => {
       // Guarded against listener-resolution-after-unmount under React
       // StrictMode's double-invoke effect cycle in dev.
       if (cancelled) return;
       seq += 1;
-      setEvent({ seq, result: e.payload });
+      setEvent({ seq, result });
+    };
+
+    listen<SnipResult>("snip-complete", (e) => {
+      handleResult(e.payload);
     })
       .then((fn) => {
         if (cancelled) fn();
-        else off = fn;
+        else offSnip = fn;
       })
-      .catch((err) => console.error("[snip-result] listen failed", err));
+      .catch((err) =>
+        console.error("[snip-result] snip-complete listen failed", err),
+      );
+
+    listen<SnipResult>("history-preview-open", (e) => {
+      handleResult(e.payload);
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else offHistory = fn;
+      })
+      .catch((err) =>
+        console.error("[snip-result] history-preview-open listen failed", err),
+      );
 
     return () => {
       cancelled = true;
-      off?.();
+      offSnip?.();
+      offHistory?.();
     };
   }, []);
 

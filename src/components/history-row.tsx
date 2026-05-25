@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { Copy, Loader2, RotateCw, Trash2 } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { toast } from "sonner";
 import type { HistoryItem } from "@/stores/history-store";
+import type { SnipResult } from "@/lib/invoke";
 import { RerunMenu } from "./rerun-menu";
 
 type Props = {
@@ -34,6 +36,23 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
     }
   };
 
+  const handleOpenPreview = async () => {
+    const payload: SnipResult = {
+      status: "ok",
+      text: item.text,
+      detected: item.detected,
+      agent: item.agent,
+      image_path: item.image_path,
+      record_id: item.id,
+    };
+
+    try {
+      await emit("history-preview-open", payload);
+    } catch (err) {
+      toast.error("Preview failed", { description: String(err) });
+    }
+  };
+
   return (
     <article
       data-testid="history-row"
@@ -50,8 +69,14 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
         <div className="size-16 shrink-0 rounded border border-dashed border-slate-200 dark:border-slate-700" />
       )}
 
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <button
+        type="button"
+        onClick={() => void handleOpenPreview()}
+        className="min-w-0 flex-1 cursor-pointer rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        title="Open in preview"
+        aria-label="Open history item in preview"
+      >
+        <span className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
           <span>{relativeTime}</span>
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {item.agent}
@@ -62,11 +87,11 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
           {item.latency_ms > 0 && (
             <span className="text-slate-400">{item.latency_ms} ms</span>
           )}
-        </div>
-        <p className="line-clamp-2 font-mono text-xs text-slate-700 dark:text-slate-300">
+        </span>
+        <span className="line-clamp-2 font-mono text-xs text-slate-700 dark:text-slate-300">
           {item.text}
-        </p>
-      </div>
+        </span>
+      </button>
 
       <div className={`relative flex shrink-0 flex-col items-end gap-1 transition focus-within:opacity-100 ${rerunOpen || rerunning ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         <button
