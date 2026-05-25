@@ -55,4 +55,4 @@ STRICT RULES:
 Begin output now:";
 
 pub const GEMINI_CLI_PROMPT: &str =
-    "Chuyển toàn bộ nội dung ảnh sang LaTeX. Chỉ xuất LaTeX, không giải thích.";
+    "Chuyển toàn bộ nội dung ảnh sang Markdown. Bảng dùng GitHub Markdown table (|---|). Công thức toán inline dùng $...$, display dùng $$...$$. Giữ nguyên tiếng Việt. Chỉ xuất nội dung, không giải thích.";

@@ -83,12 +83,123 @@ fn strip_thinking_transcript(raw: &str) -> String {
     raw.to_string()
 }
 
+fn textbf_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\\textbf\{([^}]*)\}").unwrap())
+}
+
+fn textit_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\\textit\{([^}]*)\}").unwrap())
+}
+
+fn hspace_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\\hspace\{[^}]*\}").unwrap())
+}
+
+fn tabular_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?s)\\begin\{tabular\}\{[^}]*\}(.*?)\\end\{tabular\}").unwrap()
+    })
+}
+
+fn enumerate_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?s)\\begin\{enumerate\}(?:\[[^\]]*\])?(.*?)\\end\{enumerate\}").unwrap()
+    })
+}
+
+fn multicols_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?s)\\begin\{multicols\}\{[^}]*\}(.*?)\\end\{multicols\}").unwrap()
+    })
+}
+
+fn normalize_latex_to_markdown(raw: &str) -> String {
+    let mut s = raw.to_string();
+
+    s = tabular_re()
+        .replace_all(&s, |caps: &regex::Captures| {
+            latex_tabular_to_md_table(&caps[1])
+        })
+        .to_string();
+
+    s = enumerate_re()
+        .replace_all(&s, |caps: &regex::Captures| {
+            latex_enumerate_to_md(&caps[1])
+        })
+        .to_string();
+
+    s = multicols_re().replace_all(&s, "$1").to_string();
+
+    s = textbf_re().replace_all(&s, "**$1**").to_string();
+    s = textit_re().replace_all(&s, "*$1*").to_string();
+    s = hspace_re().replace_all(&s, " ").to_string();
+    s = s.replace("\\par", "\n\n");
+    s = s.replace("\\begin{center}", "");
+    s = s.replace("\\end{center}", "");
+    s = s.replace("\\\\", "\n");
+    s
+}
+
+fn latex_enumerate_to_md(body: &str) -> String {
+    let labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    let mut idx = 0;
+    let mut out = String::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("\\item") {
+            let label = labels.get(idx).copied().unwrap_or('?');
+            idx += 1;
+            out.push_str(&format!("**{label}.** {}\n\n", rest.trim()));
+        }
+    }
+    out
+}
+
+fn latex_tabular_to_md_table(body: &str) -> String {
+    let cleaned = body
+        .replace("\\hline", "")
+        .replace("\\\\", "\n");
+
+    let rows: Vec<&str> = cleaned
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    if rows.is_empty() {
+        return String::new();
+    }
+
+    let mut md_rows: Vec<String> = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        let cells: Vec<&str> = row.split('&').map(|c| c.trim()).collect();
+        let md_row = format!("| {} |", cells.join(" | "));
+        md_rows.push(md_row);
+        if i == 0 {
+            let sep = cells.iter().map(|_| "---").collect::<Vec<_>>();
+            md_rows.push(format!("| {} |", sep.join(" | ")));
+        }
+    }
+    md_rows.join("\n")
+}
+
 pub fn post_process(raw: &str) -> String {
     let mut s = raw.trim().to_string();
 
     // 0. Strip thinking/reasoning transcripts (Gemini CLI).
     s = strip_thinking_transcript(&s);
     s = s.trim().to_string();
+
+    // 0b. Convert raw LaTeX to Markdown when agent outputs LaTeX instead of MD.
+    if s.contains("\\begin{") || s.contains("\\textbf{") || s.contains("\\item") {
+        s = normalize_latex_to_markdown(&s);
+    }
 
     // 1. Strip leaked category labels from the very top.
     s = leading_category_label_re().replace(&s, "").to_string();
@@ -212,6 +323,30 @@ mod tests {
         let input = "-5>thought\nThe image shows a math problem.\nCâu 4. Tìm $x$ sao cho $x^2=4$.";
         let result = post_process(input);
         assert!(result.starts_with("Câu 4."), "got: {result}");
+    }
+
+    #[test]
+    fn converts_latex_tabular_to_markdown_table() {
+        let input = "\\textbf{Câu 12.} Một vườn thú ghi lại tuổi của 20 con hổ\n\\begin{center}\n\\begin{tabular}{|l|c|c|c|c|c|}\n\\hline\nTuổi thọ ( năm) & [14;15) & [15;16) & [16;17) & [17;18) & [18;19) \\\\\\hline\nSố con hổ & 1 & 3 & 8 & 6 & 2 \\\\\\hline\n\\end{tabular}\n\\end{center}\nKhoảng biến thiên của mẫu số liệu trên bảng\n\\par\n\\textbf{A.} 6. \\hspace{2cm} \\textbf{B.} 8. \\hspace{2cm} \\textbf{C.} 5. \\hspace{2cm} \\textbf{D.} 7.";
+        let result = post_process(input);
+        assert!(result.contains("**Câu 12.**"), "missing bold: {result}");
+        assert!(result.contains("| Tuổi thọ ( năm) |"), "missing table: {result}");
+        assert!(result.contains("| --- |"), "missing separator: {result}");
+        assert!(result.contains("**A.** 6."), "missing options: {result}");
+        assert!(!result.contains("\\textbf"), "raw latex leaked: {result}");
+        assert!(!result.contains("\\begin"), "raw latex leaked: {result}");
+    }
+
+    #[test]
+    fn converts_latex_enumerate_multicols_to_markdown() {
+        let input = "Câu 12. Nội dung\n\\begin{multicols}{4}\n\\begin{enumerate}[label=\\Alph*.]\n\\item 6.\n\\item 8.\n\\item 5.\n\\item 7.\n\\end{enumerate}\n\\end{multicols}";
+        let result = post_process(input);
+        assert!(result.contains("**A.** 6."), "missing A: {result}");
+        assert!(result.contains("**B.** 8."), "missing B: {result}");
+        assert!(result.contains("**D.** 7."), "missing D: {result}");
+        assert!(!result.contains("\\begin"), "raw latex leaked: {result}");
+        assert!(!result.contains("\\item"), "raw item leaked: {result}");
+        assert!(!result.contains("\\end"), "raw end leaked: {result}");
     }
 
     #[test]
