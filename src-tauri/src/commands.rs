@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::agents::{
     self, keychain,
-    registry::{AgentInfo, CLOUD_GEMINI_ID, GEMINI_CLI_ID},
+    registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID},
 };
 use crate::capture::{
     capture_active_monitor, crop_region_to_temp_png, CaptureError, CropError, MonitorSnapshot,
@@ -108,6 +108,7 @@ pub async fn test_agent(agent_id: String, image_path: String) -> Result<TestAgen
 pub fn set_api_key(provider: String, key: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::set_gemini_api_key(&key).map_err(|e| e.to_string()),
+        "mistral" => keychain::set_mistral_api_key(&key).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -116,6 +117,7 @@ pub fn set_api_key(provider: String, key: String) -> Result<(), String> {
 pub fn has_api_key(provider: String) -> Result<bool, String> {
     match provider.as_str() {
         "gemini" => Ok(keychain::has_gemini_api_key()),
+        "mistral" => Ok(keychain::has_mistral_api_key()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -124,6 +126,7 @@ pub fn has_api_key(provider: String) -> Result<bool, String> {
 pub fn delete_api_key(provider: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::delete(keychain::GEMINI_ACCOUNT).map_err(|e| e.to_string()),
+        "mistral" => keychain::delete(keychain::MISTRAL_ACCOUNT).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -692,6 +695,7 @@ impl Drop for CaptureVisibilityGuard {
 
 // Compile-time guard: cloud agent id stays exported from registry.
 const _: &str = CLOUD_GEMINI_ID;
+const _: &str = CLOUD_MISTRAL_ID;
 
 // -----------------------------------------------------------------------
 // Phase 7: history commands

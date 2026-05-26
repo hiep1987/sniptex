@@ -67,6 +67,10 @@ name = "cloud_gemini_api"
 path = "tests/rust/cloud_gemini_api_test.rs"
 
 [[test]]
+name = "cloud_mistral_api"
+path = "tests/rust/cloud_mistral_api_test.rs"
+
+[[test]]
 name = "agent_registry_argv"
 path = "tests/rust/agent_registry_argv_test.rs"
 

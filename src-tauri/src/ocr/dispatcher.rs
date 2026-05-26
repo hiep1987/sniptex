@@ -23,10 +23,11 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
+use crate::agents::cloud_mistral_api::{self, CloudMistralError};
 use crate::agents::keychain;
 use crate::agents::registry::{
-    build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CODEX_ID, DEFAULT_FALLBACK_CHAIN,
-    GEMINI_CLI_ID,
+    build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CODEX_ID,
+    DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
@@ -76,6 +77,23 @@ impl From<CloudGeminiError> for DispatchError {
             CloudGeminiError::Network(m) => DispatchError::Network(m),
             CloudGeminiError::EmptyResponse => DispatchError::EmptyOutput,
             CloudGeminiError::Parse(m) => DispatchError::BadRequest(m),
+        }
+    }
+}
+
+impl From<CloudMistralError> for DispatchError {
+    fn from(e: CloudMistralError) -> Self {
+        match e {
+            CloudMistralError::RateLimited => DispatchError::RateLimited,
+            CloudMistralError::BadRequest(m) => DispatchError::BadRequest(m),
+            CloudMistralError::AuthFailed(c) => DispatchError::AuthFailed(c),
+            CloudMistralError::ServerError(c, m) => DispatchError::NonZeroExit {
+                code: c as i32,
+                stderr: m,
+            },
+            CloudMistralError::Network(m) => DispatchError::Network(m),
+            CloudMistralError::EmptyResponse => DispatchError::EmptyOutput,
+            CloudMistralError::Parse(m) => DispatchError::BadRequest(m),
         }
     }
 }
@@ -271,14 +289,19 @@ pub fn looks_like_gemini_tool_error(response: &str) -> bool {
 }
 
 async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, DispatchError> {
-    if agent.spec.id != CLOUD_GEMINI_ID {
-        return Err(DispatchError::AgentNotAvailable(agent.spec.id.to_string()));
-    }
-    let key = keychain::get_gemini_api_key()
-        .map_err(|_| DispatchError::MissingApiKey("gemini"))?;
-
-    let raw =
-        cloud_gemini_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?;
+    let raw = match agent.spec.id {
+        CLOUD_GEMINI_ID => {
+            let key = keychain::get_gemini_api_key()
+                .map_err(|_| DispatchError::MissingApiKey("gemini"))?;
+            cloud_gemini_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
+        }
+        CLOUD_MISTRAL_ID => {
+            let key = keychain::get_mistral_api_key()
+                .map_err(|_| DispatchError::MissingApiKey("mistral"))?;
+            cloud_mistral_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
+        }
+        _ => return Err(DispatchError::AgentNotAvailable(agent.spec.id.to_string())),
+    };
     let cleaned = post_process(&raw);
     if cleaned.is_empty() || cleaned == "[UNREADABLE]" {
         return Err(DispatchError::EmptyOutput);

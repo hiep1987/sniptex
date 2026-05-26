@@ -1,11 +1,12 @@
 //! Static agent catalogue and per-agent CLI argv builder.
 //!
-//! Three agents ship in v1:
+//! Four agents ship in v1:
 //!   1. `codex` — default OpenAI Codex CLI (BYOA).
 //!   2. `gemini-cli` — experimental Gemini CLI gated with `--approval-mode plan`
 //!      to prevent the tool-loop failure mode discovered in Phase 1.
 //!   3. `cloud-gemini` — Gemini Vision API direct HTTP call (BYOK, free-tier
 //!      15 RPM / 1500 RPD).
+//!   4. `cloud-mistral` — Mistral Vision API direct HTTP call (BYOK).
 //!
 //! Adding more (Claude Code, OpenCode) becomes a mechanical change here
 //! plus a new adapter file under `agents/`.
@@ -41,6 +42,7 @@ pub struct AgentInfo {
 pub const CODEX_ID: &str = "codex";
 pub const GEMINI_CLI_ID: &str = "gemini-cli";
 pub const CLOUD_GEMINI_ID: &str = "cloud-gemini";
+pub const CLOUD_MISTRAL_ID: &str = "cloud-mistral";
 
 pub const AGENTS: &[AgentSpec] = &[
     AgentSpec {
@@ -64,13 +66,20 @@ pub const AGENTS: &[AgentSpec] = &[
         supports_vision: true,
         kind: AgentKind::CloudApi,
     },
+    AgentSpec {
+        id: CLOUD_MISTRAL_ID,
+        display_name: "Mistral Vision API",
+        binary_names: &[],
+        supports_vision: true,
+        kind: AgentKind::CloudApi,
+    },
 ];
 
 /// Default fallback order: Codex first (most reliable per Session-3),
 /// then cloud Gemini (no local install required). Gemini CLI is omitted
 /// because live OCR validation showed it can return unrelated content
 /// while also invoking tools/skills in headless mode.
-pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID];
+pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID];
 
 pub fn spec_by_id(id: &str) -> Option<&'static AgentSpec> {
     AGENTS.iter().find(|a| a.id == id)
@@ -117,7 +126,7 @@ pub fn build_command_args(
                 "none".into(),
             ]
         }
-        CLOUD_GEMINI_ID => Vec::new(),
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID => Vec::new(),
         other => panic!("Unknown agent id: {other}"),
     }
 }

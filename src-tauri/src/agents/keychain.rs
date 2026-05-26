@@ -9,6 +9,7 @@ use thiserror::Error;
 
 pub const SERVICE: &str = "com.sniptex";
 pub const GEMINI_ACCOUNT: &str = "gemini-api-key";
+pub const MISTRAL_ACCOUNT: &str = "mistral-api-key";
 
 #[derive(Debug, Error)]
 pub enum KeychainError {
@@ -81,4 +82,16 @@ pub fn get_gemini_api_key() -> Result<String, KeychainError> {
 
 pub fn set_gemini_api_key(key: &str) -> Result<(), KeychainError> {
     set(GEMINI_ACCOUNT, key)
+}
+
+pub fn has_mistral_api_key() -> bool {
+    has(MISTRAL_ACCOUNT)
+}
+
+pub fn get_mistral_api_key() -> Result<String, KeychainError> {
+    get(MISTRAL_ACCOUNT)
+}
+
+pub fn set_mistral_api_key(key: &str) -> Result<(), KeychainError> {
+    set(MISTRAL_ACCOUNT, key)
 }
