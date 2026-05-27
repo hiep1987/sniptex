@@ -105,6 +105,48 @@ pub async fn run_ocr(agent: &AgentInfo, image_path: &str) -> Result<String, Disp
     }
 }
 
+/// OCR a PDF via a CLI agent: render each page to a temp PNG, run OCR on
+/// each sequentially, and concatenate results. Temp dir cleaned up on all
+/// exit paths via RAII.
+pub async fn run_pdf_cli(
+    agent: &AgentInfo,
+    pdf_path: &str,
+) -> Result<String, DispatchError> {
+    let tmp = TempDir::new(staging_path(&format!(
+        "pdf-pages-{}",
+        Uuid::new_v4()
+    )))?;
+
+    let page_pngs = crate::ocr::pdf_render::render_pages_to_pngs(
+        pdf_path,
+        tmp.path(),
+        None,
+    )
+    .map_err(|e| DispatchError::Io(e.to_string()))?;
+
+    if page_pngs.is_empty() {
+        return Err(DispatchError::EmptyOutput);
+    }
+
+    let mut parts: Vec<String> = Vec::with_capacity(page_pngs.len());
+    for (i, png) in page_pngs.iter().enumerate() {
+        let path_str = png.to_string_lossy();
+        match run_cli_agent(agent, &path_str).await {
+            Ok(text) => parts.push(text),
+            Err(e) => {
+                log::warn!("[pdf-cli] page {} failed: {e}", i + 1);
+                return Err(e);
+            }
+        }
+    }
+
+    let combined = parts.join("\n\n");
+    if combined.is_empty() {
+        return Err(DispatchError::EmptyOutput);
+    }
+    Ok(combined)
+}
+
 async fn run_cli_agent(agent: &AgentInfo, image_path: &str) -> Result<String, DispatchError> {
     // RAII guard removes the temp file on every exit path — including
     // panic, future cancellation, and timeout — so we don't leak files

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "CLI Agent PDF-via-Image Fallback"
-status: pending
+status: done
 priority: P1
 effort: "3h"
 dependencies: [1]
@@ -45,10 +45,10 @@ Fallback: if no PDF renderer available at compile time, return error "PDF upload
 
 ## Success Criteria
 
-- [ ] `render_pages_to_pngs` produces readable PNGs from a test PDF
-- [ ] CLI agent OCR on rendered page images produces valid TeX
-- [ ] Temp files cleaned up on success and failure paths
-- [ ] Existing image OCR tests unaffected
+- [x] `render_pages_to_pngs` produces readable PNGs from a test PDF
+- [x] CLI agent OCR on rendered page images produces valid TeX (via `run_pdf_cli`)
+- [x] Temp files cleaned up on success and failure paths (RAII `TempDir`)
+- [x] Existing image OCR tests unaffected
 
 ## Risk Assessment
 
