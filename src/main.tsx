@@ -7,9 +7,10 @@ import PreviewWindow from "./windows/preview-window";
 import SettingsWindow from "./windows/settings-window";
 import HistoryWindow from "./windows/history-window";
 import OnboardingWindow from "./windows/onboarding-window";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { tauri } from "./lib/invoke";
 import { useTheme } from "./hooks/use-theme";
-import { useSettingsStore } from "./stores/settings-store";
+import { useSettingsStore, SETTINGS_CHANGED_EVENT } from "./stores/settings-store";
 import "./styles/globals.css";
 
 // Expose tauri invoke helpers on window for devtools console access.
@@ -44,7 +45,17 @@ if (label === "preview") {
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const fetch = useSettingsStore((s) => s.fetch);
+
   React.useEffect(() => { fetch(); }, [fetch]);
+
+  React.useEffect(() => {
+    let off: UnlistenFn | undefined;
+    listen(SETTINGS_CHANGED_EVENT, () => { fetch(); })
+      .then((fn) => { off = fn; })
+      .catch(() => {});
+    return () => { off?.(); };
+  }, [fetch]);
+
   useTheme();
   return <>{children}</>;
 }

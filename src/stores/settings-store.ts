@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { emit } from "@tauri-apps/api/event";
 import {
   tauri,
   type AppSettings,
@@ -7,6 +8,8 @@ import {
   type OutputFormat,
   type HistorySizeOption,
 } from "@/lib/invoke";
+
+export const SETTINGS_CHANGED_EVENT = "settings-changed";
 
 export type { ThemeMode, OutputFormat, HistorySizeOption };
 
@@ -47,6 +50,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     try {
       const updated = await tauri.updateSettings(p);
       set(updated);
+      emit(SETTINGS_CHANGED_EVENT).catch(() => {});
     } catch (e) {
       console.error("[settings] patch failed", e);
     }
