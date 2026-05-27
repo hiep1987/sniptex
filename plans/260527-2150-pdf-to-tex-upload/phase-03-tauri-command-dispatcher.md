@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Tauri Command + Dispatcher Wiring"
-status: pending
+status: done
 priority: P1
 effort: "2h"
 dependencies: [1, 2]
@@ -65,12 +65,12 @@ run_pdf_ocr(pdf_path, agent_id?)
 
 ## Success Criteria
 
-- [ ] `run_pdf_ocr` compiles and is registered
-- [ ] Cloud API path sends PDF directly without rendering
-- [ ] CLI path renders pages and OCRs each
-- [ ] Progress events emitted for CLI multi-page path
-- [ ] Result saved to history
-- [ ] Existing `run_snip` unaffected
+- [x] `run_pdf_ocr` compiles and is registered
+- [x] Cloud API path sends PDF directly without rendering
+- [x] CLI path renders pages and OCRs each
+- [x] Progress events emitted for CLI multi-page path
+- [x] Result saved to history (PDF copied to history dir, first-page thumbnail)
+- [x] Existing `run_snip` unaffected
 
 ## Risk Assessment
 

@@ -707,6 +707,243 @@ const _: &str = CLOUD_GEMINI_ID;
 const _: &str = CLOUD_MISTRAL_ID;
 
 // -----------------------------------------------------------------------
+// PDF OCR command
+// -----------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct PdfProgress {
+    pub page: usize,
+    pub total: usize,
+}
+
+#[tauri::command]
+pub async fn run_pdf_ocr(
+    app: AppHandle,
+    pdf_path: String,
+    agent_id: Option<String>,
+) -> Result<SnipResult, String> {
+    use crate::agents::registry::AgentKind;
+
+    let path = Path::new(&pdf_path);
+    if !path.exists() {
+        return Err(format!("file not found: {pdf_path}"));
+    }
+    if path.extension().and_then(|e| e.to_str()) != Some("pdf") {
+        return Err("expected a .pdf file".into());
+    }
+
+    let priority = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get().agent_priority)
+        .unwrap_or_default();
+
+    let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
+        .await
+        .map_err(|e| format!("agent detect join: {e}"))?;
+    if installed.is_empty() {
+        return Err("no OCR agents installed".into());
+    }
+
+    let agent = pick_agent(&installed, agent_id.as_deref(), &priority)?;
+    let agent_id_str = agent.spec.id.to_string();
+
+    let ocr_started = Instant::now();
+
+    let text = match agent.spec.kind {
+        AgentKind::CloudApi => {
+            run_cloud_pdf_ocr(agent, &pdf_path).await?
+        }
+        AgentKind::CliBin => {
+            run_cli_pdf_ocr(&app, agent, &pdf_path).await?
+        }
+    };
+
+    let latency_ms = ocr_started.elapsed().as_millis() as i64;
+    let cleaned = ocr::post_process(&text);
+    if cleaned.is_empty() || cleaned == "[UNREADABLE]" {
+        return Err("OCR returned empty output".into());
+    }
+
+    let detected = ocr::detect_type(&cleaned);
+
+    let store = app.state::<HistoryStore>();
+    let record_id = persist_pdf_to_history(
+        &store,
+        &pdf_path,
+        &cleaned,
+        &agent_id_str,
+        &detected,
+        latency_ms,
+    );
+
+    let result = SnipResult {
+        status: "ok".into(),
+        text: Some(cleaned),
+        detected: Some(detected),
+        agent: Some(agent_id_str),
+        image_path: Some(pdf_path),
+        record_id: record_id.ok(),
+    };
+
+    let _ = app.emit("snip-complete", result.clone());
+    Ok(result)
+}
+
+fn pick_agent<'a>(
+    installed: &'a [AgentInfo],
+    agent_id: Option<&str>,
+    priority: &[String],
+) -> Result<&'a AgentInfo, String> {
+    if let Some(id) = agent_id {
+        installed
+            .iter()
+            .find(|a| a.spec.id == id)
+            .ok_or_else(|| format!("agent not installed: {id}"))
+    } else {
+        // Pick highest-priority installed agent
+        for id in priority {
+            if let Some(a) = installed.iter().find(|a| a.spec.id == id) {
+                return Ok(a);
+            }
+        }
+        installed.first().ok_or_else(|| "no agents available".into())
+    }
+}
+
+async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, String> {
+    use crate::agents::cloud_gemini_api;
+    use crate::agents::cloud_mistral_api;
+
+    match agent.spec.id {
+        CLOUD_GEMINI_ID => {
+            let key = keychain::get_gemini_api_key()
+                .map_err(|_| "missing Gemini API key".to_string())?;
+            cloud_gemini_api::call_with_pdf_path(pdf_path, ocr::MASTER_PROMPT, &key)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        CLOUD_MISTRAL_ID => {
+            let key = keychain::get_mistral_api_key()
+                .map_err(|_| "missing Mistral API key".to_string())?;
+            cloud_mistral_api::call_with_pdf_path(pdf_path, ocr::MASTER_PROMPT, &key)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        _ => Err(format!("cloud agent {} does not support PDF", agent.spec.id)),
+    }
+}
+
+async fn run_cli_pdf_ocr(
+    app: &AppHandle,
+    agent: &AgentInfo,
+    pdf_path: &str,
+) -> Result<String, String> {
+    let tmp_dir = std::env::temp_dir()
+        .join("sniptex")
+        .join(format!("pdf-pages-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("create temp dir: {e}"))?;
+    let _cleanup = TempDirGuard(tmp_dir.clone());
+
+    let page_pngs = ocr::pdf_render::render_pages_to_pngs(pdf_path, &tmp_dir, None)
+        .map_err(|e| format!("PDF render: {e}"))?;
+
+    let total = page_pngs.len();
+    if total == 0 {
+        return Err("PDF has no pages".into());
+    }
+
+    let mut parts: Vec<String> = Vec::with_capacity(total);
+    for (i, png) in page_pngs.iter().enumerate() {
+        let _ = app.emit("pdf-progress", PdfProgress { page: i + 1, total });
+
+        let path_str = png.to_string_lossy().to_string();
+        let text = ocr::run_ocr(agent, &path_str)
+            .await
+            .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
+        parts.push(text);
+    }
+
+    Ok(parts.join("\n\n"))
+}
+
+fn persist_pdf_to_history(
+    store: &State<'_, HistoryStore>,
+    pdf_path: &str,
+    text: &str,
+    agent_id: &str,
+    detected: &DetectedType,
+    latency_ms: i64,
+) -> Result<i64, String> {
+    let uuid_str = Uuid::new_v4().to_string();
+    let images_dir = store.images_dir();
+    let thumbs_dir = store.thumbs_dir();
+
+    // Copy PDF into history images dir so reruns work
+    let image_dst = images_dir.join(format!("{uuid_str}.pdf"));
+    std::fs::copy(pdf_path, &image_dst)
+        .map_err(|e| format!("copy pdf to history: {e}"))?;
+
+    // Render first page as thumbnail
+    let thumb_dst = thumbs_dir.join(format!("{uuid_str}.webp"));
+    let thumb_tmp = std::env::temp_dir().join("sniptex").join(format!("{uuid_str}-thumb"));
+    let _ = std::fs::create_dir_all(&thumb_tmp);
+    let thumb_result = ocr::pdf_render::render_pages_to_pngs(
+        pdf_path,
+        &thumb_tmp,
+        Some(72.0),
+    );
+    match thumb_result {
+        Ok(pages) if !pages.is_empty() => {
+            if let Err(e) = storage::thumbnail::make_thumbnail(&pages[0], &thumb_dst) {
+                log::warn!("pdf thumbnail failed: {e}");
+                // Non-fatal: continue without thumbnail
+            }
+        }
+        _ => {
+            log::warn!("could not render pdf first page for thumbnail");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&thumb_tmp);
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let detected_str = detected_to_string(detected);
+    let new_record = history_repo::NewRecord {
+        uuid: uuid_str,
+        created_at: now,
+        agent_id: agent_id.to_string(),
+        output_text: text.to_string(),
+        detected_type: detected_str,
+        image_path: image_dst.to_string_lossy().to_string(),
+        thumb_path: thumb_dst.to_string_lossy().to_string(),
+        latency_ms,
+    };
+
+    let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
+    let id = history_repo::insert(&conn, &new_record).map_err(|e| e.to_string())?;
+    let evicted = history_repo::enforce_max_records(&conn, DEFAULT_MAX_RECORDS)
+        .map_err(|e| e.to_string())?;
+    drop(conn);
+    for (img, thumb) in evicted {
+        storage::remove_file_if_exists(&img);
+        storage::remove_file_if_exists(&thumb);
+    }
+    Ok(id)
+}
+
+struct TempDirGuard(PathBuf);
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+// -----------------------------------------------------------------------
 // Phase 7: history commands
 // -----------------------------------------------------------------------
 
