@@ -11,7 +11,7 @@ dependencies: [7]
 
 ## Overview
 
-Build out the full Settings Window (5 tabs) with persistent storage via `tauri-plugin-store`, and the 6-step Onboarding Window shown on first run. Settings include hotkey rebinding, agent priority drag-drop, default output format, history size, preview auto-hide duration, sound on success, launch at login, and theme. The Agents flow now covers **three OCR paths** (Codex CLI default, Gemini CLI experimental secondary, Gemini Vision API cloud BYOK) per Validation Session 3 / Path C.
+Build out the full Settings Window (5 tabs) with persistent storage via `tauri-plugin-store`, and the 6-step Onboarding Window shown on first run. Settings include hotkey rebinding, agent priority drag-drop, default output format, history size, preview auto-hide duration, sound on success, launch at login, and theme. The Agents flow now covers **four OCR paths** (Codex CLI default, Gemini CLI experimental secondary, Gemini Vision API cloud BYOK, Mistral Vision API cloud BYOK) per Validation Session 3 / Path C + Mistral addition.
 
 <!-- Updated: Validation Session 3 (2026-05-21) - Path C hybrid: BYOK onboarding step added; AgentsTab gains cloud-API toggle + API-key field; Codex is the recommended default in onboarding -->
 
@@ -62,7 +62,7 @@ Build out the full Settings Window (5 tabs) with persistent storage via `tauri-p
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppSettings {
     pub hotkey: String,                    // "CommandOrControl+Shift+M"
-    pub agent_priority: Vec<String>,       // default ["codex", "cloud-gemini", "gemini-cli"] (Session 3)
+    pub agent_priority: Vec<String>,       // default ["codex", "cloud-gemini", "cloud-mistral", "gemini-cli"]
     pub default_format: OutputFormat,      // Smart | Inline | Display | Plain | Markdown | MathML | UnicodePretty
     pub copy_as_formats: Vec<OutputFormat>,
     pub history_size: HistorySize,         // Fifty | OneHundred | FiveHundred | Unlimited
@@ -100,11 +100,12 @@ pub struct AppSettings {
    - `set_launch_at_login(enabled: bool)`
 4. Build `settingsStore.ts` (Zustand) with fetch on mount + `updateSetting(key, value)` action that calls `update_settings`.
 5. Build SettingsWindow tab components per spec:
-   - **AgentsTab** (Session 3 expanded): list installed agents from `detect_agents` (v1 = Codex CLI, Gemini CLI, Cloud Gemini API). 3-row drag-drop via `@dnd-kit/sortable` for fallback priority. Each row shows agent kind badge (`CLI` or `Cloud`), status (installed / key set / not configured), and Test button → `test_agent(id)`. Re-scan button reruns detection. **Cloud-Gemini row** includes:
+   - **AgentsTab** (expanded): list installed agents from `detect_agents` (v1 = Codex CLI, Gemini CLI, Cloud Gemini API, Cloud Mistral API). 4-row drag-drop via `@dnd-kit/sortable` for fallback priority. Each row shows agent kind badge (`CLI` or `Cloud`), status (installed / key set / not configured), and Test button → `test_agent(id)`. Re-scan button reruns detection. **Cloud API rows** (Gemini + Mistral) each include:
      - "Set API key" / "Update API key" button → opens modal with `ApiKeyInput`
-     - "Remove key" button (with confirm) → `delete_api_key("gemini")`
-     - Toggle "Use cloud mode automatically when CLI is slow" (controls `cloud_mode_enabled`)
-     - Link to "Get a free key at Google AI Studio"
+     - "Remove key" button (with confirm) → `delete_api_key("gemini")` / `delete_api_key("mistral")`
+     - Link to get a free key: "Google AI Studio" (Gemini) / "Mistral Console" (Mistral)
+   - **Cloud-Gemini row** additionally has: Toggle "Use cloud mode automatically when CLI is slow" (controls `cloud_mode_enabled`)
+   - **Cloud-Mistral row**: same key management pattern; link to `https://console.mistral.ai/api-keys`
    - Show "More agents (Claude Code, OpenCode) in v1.x" hint.
    - **HotkeysTab**: custom `HotkeyInput` component that listens to keypress, displays combo, validates, calls `rebind_hotkey`. Show "Default: CMD+Shift+M" link.
    - **GeneralTab**: theme select, autostart toggle, sound toggle, preview duration slider.
@@ -113,8 +114,8 @@ pub struct AppSettings {
 6. Build OnboardingWindow steps; route through `Stepper` from shell.
    - Step 2 uses `detect_agents` results to pick branch (found vs missing); always recommend Codex first.
    - Step 3 shows platform-specific install command (Mac brew vs Windows winget vs npm fallback); offers both Codex (default) and Gemini CLI (experimental secondary) install commands.
-   - Step 4 (Session 3 NEW) — `CloudKeyStep`: explainer card + `ApiKeyInput` + "Test key" button + "Skip — I'll do this later" link. Persists `cloud_mode_enabled=true` on save.
-   - Step 5 triggers `run_snip` with a bundled `demo-image.png` if user has no agent yet (use `--dry-run` mode that returns canned text). Step picks the agent in this order: cloud-gemini (if key set) → codex (if installed) → gemini-cli (if installed) → dry-run.
+   - Step 4 (Session 3 NEW) — `CloudKeyStep`: explainer card for **two cloud providers** (Gemini + Mistral). Each has `ApiKeyInput` + "Test key" button. User can set one, both, or skip. "Skip — I'll do this later" link at bottom. Persists `cloud_mode_enabled=true` if any key is saved.
+   - Step 5 triggers `run_snip` with a bundled `demo-image.png` if user has no agent yet (use `--dry-run` mode that returns canned text). Step picks the agent in this order: cloud-gemini (if key set) → cloud-mistral (if key set) → codex (if installed) → gemini-cli (if installed) → dry-run.
 7. First-run logic in `lib.rs` setup: if `settings.onboarding_completed == false`, show OnboardingWindow on launch instead of tray-only mode.
 8. Smoke tests:
    - Toggle theme → all open windows update
@@ -129,7 +130,7 @@ pub struct AppSettings {
 - [ ] Wire `tauri-plugin-store` + `tauri-plugin-autostart`
 - [ ] Implement get/update/rebind/autostart commands
 - [ ] Build settingsStore.ts with reactive updates
-- [ ] Build 5 settings tabs (General/Agents/Hotkeys/Formats/About) — AgentsTab covers all 3 agent paths
+- [ ] Build 5 settings tabs (General/Agents/Hotkeys/Formats/About) — AgentsTab covers all 4 agent paths (Codex, Gemini CLI, Cloud Gemini, Cloud Mistral)
 - [ ] Build HotkeyInput component with capture + conflict detection
 - [ ] Build ApiKeyInput component (password-style, paste, reveal toggle, test button)
 - [ ] Build 6 onboarding steps with platform-aware install guide + CloudKeyStep

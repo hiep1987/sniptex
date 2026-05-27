@@ -1,13 +1,14 @@
-//! Mistral Vision API adapter -- direct HTTP, BYOK.
+//! Mistral OCR API adapter -- direct HTTP, BYOK.
 //!
-//! Uses the OpenAI-compatible chat completions endpoint with base64 data
-//! URLs. The dispatcher post-processes the raw model text.
+//! Uses the dedicated `/v1/ocr` endpoint with `mistral-ocr-latest` model.
+//! Priced per page (not per token). Image sent as base64 data URI via
+//! `image_url` document type. Response returns `pages[].markdown`.
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub const CLOUD_MISTRAL_MODEL: &str = "mistral-small-latest";
+pub const CLOUD_MISTRAL_MODEL: &str = "mistral-ocr-latest";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
@@ -29,44 +30,30 @@ pub enum CloudMistralError {
 }
 
 #[derive(Serialize)]
-struct ChatCompletionRequest<'a> {
+struct OcrRequest {
     model: &'static str,
-    messages: [Message<'a>; 1],
-    max_tokens: u16,
+    document: OcrDocument,
 }
 
 #[derive(Serialize)]
-struct Message<'a> {
-    role: &'static str,
-    content: Vec<ContentPart<'a>>,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "type")]
-enum ContentPart<'a> {
-    #[serde(rename = "text")]
-    Text { text: &'a str },
-    #[serde(rename = "image_url")]
-    ImageUrl { image_url: String },
+struct OcrDocument {
+    #[serde(rename = "type")]
+    doc_type: &'static str,
+    image_url: String,
 }
 
 #[derive(Deserialize)]
-struct ChatCompletionResponse {
-    choices: Option<Vec<Choice>>,
+struct OcrResponse {
+    pages: Option<Vec<OcrPage>>,
 }
 
 #[derive(Deserialize)]
-struct Choice {
-    message: ResponseMessage,
-}
-
-#[derive(Deserialize)]
-struct ResponseMessage {
-    content: Option<String>,
+struct OcrPage {
+    markdown: Option<String>,
 }
 
 fn endpoint() -> &'static str {
-    "https://api.mistral.ai/v1/chat/completions"
+    "https://api.mistral.ai/v1/ocr"
 }
 
 pub fn mime_for(image_path: &str) -> &'static str {
@@ -81,14 +68,15 @@ pub fn mime_for(image_path: &str) -> &'static str {
 }
 
 pub fn parse_response(text: &str) -> Result<String, CloudMistralError> {
-    let parsed: ChatCompletionResponse =
+    let parsed: OcrResponse =
         serde_json::from_str(text).map_err(|e| CloudMistralError::Parse(e.to_string()))?;
-    parsed
-        .choices
-        .and_then(|mut c| c.drain(..).next())
-        .and_then(|c| c.message.content)
+    let markdown = parsed
+        .pages
+        .and_then(|mut pages| pages.drain(..).next())
+        .and_then(|page| page.markdown)
         .filter(|t| !t.is_empty())
-        .ok_or(CloudMistralError::EmptyResponse)
+        .ok_or(CloudMistralError::EmptyResponse)?;
+    Ok(markdown)
 }
 
 pub fn redact_key(s: &str) -> String {
@@ -108,11 +96,11 @@ pub fn redact_key(s: &str) -> String {
         .to_string()
 }
 
-/// Send `image_bytes` + `prompt` to Mistral Vision and return raw text.
+/// Send image to Mistral OCR API and return the markdown text.
 pub async fn call(
     image_bytes: &[u8],
     mime_type: &str,
-    prompt: &str,
+    _prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudMistralError> {
     let client = reqwest::Client::builder()
@@ -121,18 +109,12 @@ pub async fn call(
         .map_err(|e| CloudMistralError::Network(e.to_string()))?;
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(image_bytes);
-    let body = ChatCompletionRequest {
+    let body = OcrRequest {
         model: CLOUD_MISTRAL_MODEL,
-        messages: [Message {
-            role: "user",
-            content: vec![
-                ContentPart::Text { text: prompt },
-                ContentPart::ImageUrl {
-                    image_url: format!("data:{mime_type};base64,{encoded}"),
-                },
-            ],
-        }],
-        max_tokens: 4096,
+        document: OcrDocument {
+            doc_type: "image_url",
+            image_url: format!("data:{mime_type};base64,{encoded}"),
+        },
     };
 
     let resp = client

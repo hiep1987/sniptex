@@ -13,6 +13,8 @@ dependencies: [1, 2, 3]
 
 Add unit tests for the Mistral adapter (response parsing, error mapping, key redaction) and registry integration (argv builder, fallback chain). No live API calls -- test the parsing/mapping layer only. Validation completed with the tester-run locked test sweep before the redaction follow-up and a local full test pass after it.
 
+This phase does not cover end-to-end app validation with a real Mistral API key.
+
 ## Related Code Files
 
 - Create: `src-tauri/tests/rust/cloud_mistral_api_test.rs`
@@ -52,6 +54,7 @@ Add unit tests for the Mistral adapter (response parsing, error mapping, key red
 - [x] Mistral adapter parsing tests cover success + error paths
 - [x] Registry tests verify Mistral presence in catalogue and fallback chain
 - [x] No live API calls in test suite
+- [ ] Live app test with a real Mistral API key is completed
 
 ## Validation
 
@@ -68,6 +71,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 That final run passed with 85 tests.
+
+Live app validation remains pending because no real Mistral API key has been added in this environment.
 
 ## Risk Assessment
 

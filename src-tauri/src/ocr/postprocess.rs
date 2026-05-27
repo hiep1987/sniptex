@@ -189,10 +189,23 @@ fn latex_tabular_to_md_table(body: &str) -> String {
     md_rows.join("\n")
 }
 
+fn decode_html_entities(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+}
+
 pub fn post_process(raw: &str) -> String {
     let mut s = raw.trim().to_string();
 
-    // 0. Strip thinking/reasoning transcripts (Gemini CLI).
+    // 0a. Decode HTML entities (Mistral OCR returns &lt; &gt; in math).
+    if s.contains("&lt;") || s.contains("&gt;") || s.contains("&amp;") {
+        s = decode_html_entities(&s);
+    }
+
+    // 0b. Strip thinking/reasoning transcripts (Gemini CLI).
     s = strip_thinking_transcript(&s);
     s = s.trim().to_string();
 
@@ -252,6 +265,13 @@ pub fn post_process(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decodes_html_entities_in_math() {
+        let input = "$x_1 &lt; x_2 \\Rightarrow f(x_1) &gt; f(x_2)$";
+        let result = post_process(input);
+        assert_eq!(result, "$x_1 < x_2 \\Rightarrow f(x_1) > f(x_2)$");
+    }
 
     #[test]
     fn strips_gemini_thinking_with_numbered_marker() {

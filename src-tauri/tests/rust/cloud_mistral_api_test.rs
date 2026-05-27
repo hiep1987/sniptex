@@ -1,4 +1,4 @@
-//! Cloud Mistral adapter tests. These cover deterministic parsing,
+//! Cloud Mistral OCR adapter tests. These cover deterministic parsing,
 //! redaction, and dispatcher mapping without live network calls.
 
 use sniptex_lib::agents::cloud_mistral_api::{
@@ -8,7 +8,7 @@ use sniptex_lib::ocr::DispatchError;
 
 #[test]
 fn cloud_model_constant_is_pinned() {
-    assert_eq!(CLOUD_MISTRAL_MODEL, "mistral-small-latest");
+    assert_eq!(CLOUD_MISTRAL_MODEL, "mistral-ocr-latest");
 }
 
 #[test]
@@ -40,24 +40,35 @@ fn test_mime_resolution() {
 #[test]
 fn test_parse_success_response() {
     let raw = r#"{
-        "choices": [
-            { "message": { "content": "\\frac{a}{b}" } }
+        "pages": [
+            { "markdown": "\\frac{a}{b}" }
         ]
     }"#;
     assert_eq!(parse_response(raw).unwrap(), "\\frac{a}{b}");
 }
 
 #[test]
-fn test_parse_empty_choices() {
-    let err = parse_response(r#"{ "choices": [] }"#).unwrap_err();
+fn test_parse_empty_pages() {
+    let err = parse_response(r#"{ "pages": [] }"#).unwrap_err();
     assert!(matches!(err, CloudMistralError::EmptyResponse));
 }
 
 #[test]
-fn test_parse_null_content() {
+fn test_parse_null_markdown() {
     let err =
-        parse_response(r#"{ "choices": [{ "message": { "content": null } }] }"#).unwrap_err();
+        parse_response(r#"{ "pages": [{ "markdown": null }] }"#).unwrap_err();
     assert!(matches!(err, CloudMistralError::EmptyResponse));
+}
+
+#[test]
+fn test_parse_multi_page_returns_first() {
+    let raw = r#"{
+        "pages": [
+            { "markdown": "page one" },
+            { "markdown": "page two" }
+        ]
+    }"#;
+    assert_eq!(parse_response(raw).unwrap(), "page one");
 }
 
 #[test]
