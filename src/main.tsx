@@ -8,6 +8,8 @@ import SettingsWindow from "./windows/settings-window";
 import HistoryWindow from "./windows/history-window";
 import OnboardingWindow from "./windows/onboarding-window";
 import { tauri } from "./lib/invoke";
+import { useTheme } from "./hooks/use-theme";
+import { useSettingsStore } from "./stores/settings-store";
 import "./styles/globals.css";
 
 // Expose tauri invoke helpers on window for devtools console access.
@@ -40,9 +42,18 @@ if (label === "preview") {
   document.body.classList.add("preview-window");
 }
 
+function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const fetch = useSettingsStore((s) => s.fetch);
+  React.useEffect(() => { fetch(); }, [fetch]);
+  useTheme();
+  return <>{children}</>;
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <Root />
+    <ThemeProvider>
+      <Root />
+    </ThemeProvider>
   </React.StrictMode>,
 );
 
