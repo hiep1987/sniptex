@@ -103,8 +103,18 @@ pub async fn call(
     prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudGeminiError> {
+    call_with_timeout(image_bytes, mime_type, prompt, api_key, REQUEST_TIMEOUT).await
+}
+
+async fn call_with_timeout(
+    image_bytes: &[u8],
+    mime_type: &str,
+    prompt: &str,
+    api_key: &str,
+    timeout: Duration,
+) -> Result<String, CloudGeminiError> {
     let client = reqwest::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(timeout)
         .build()
         .map_err(|e| CloudGeminiError::Network(e.to_string()))?;
 
@@ -175,15 +185,20 @@ pub async fn call_with_image_path(
 
 /// Convenience wrapper for PDF files: read the PDF off disk and call the
 /// API with `application/pdf` mime. Gemini processes all pages in one shot.
+/// Timeout scales with page count (30s per page).
 pub async fn call_with_pdf_path(
     pdf_path: &str,
     prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudGeminiError> {
+    let pages = crate::ocr::pdf_render::page_count(pdf_path)
+        .unwrap_or(1)
+        .max(1);
+    let timeout = Duration::from_secs(pages as u64 * 30);
     let bytes = tokio::fs::read(pdf_path)
         .await
         .map_err(|e| CloudGeminiError::Network(format!("read pdf: {e}")))?;
-    call(&bytes, "application/pdf", prompt, api_key).await
+    call_with_timeout(&bytes, "application/pdf", prompt, api_key, timeout).await
 }
 
 /// Best-effort redaction of an `AIza...` Google API key from error

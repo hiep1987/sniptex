@@ -117,8 +117,17 @@ pub async fn call(
     _prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudMistralError> {
+    call_with_timeout(image_bytes, mime_type, api_key, REQUEST_TIMEOUT).await
+}
+
+async fn call_with_timeout(
+    image_bytes: &[u8],
+    mime_type: &str,
+    api_key: &str,
+    timeout: Duration,
+) -> Result<String, CloudMistralError> {
     let client = reqwest::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(timeout)
         .build()
         .map_err(|e| CloudMistralError::Network(e.to_string()))?;
 
@@ -182,15 +191,20 @@ pub async fn call_with_image_path(
     call(&bytes, mime_for(image_path), prompt, api_key).await
 }
 
+/// Timeout scales with page count (30s per page).
 pub async fn call_with_pdf_path(
     pdf_path: &str,
-    prompt: &str,
+    _prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudMistralError> {
+    let pages = crate::ocr::pdf_render::page_count(pdf_path)
+        .unwrap_or(1)
+        .max(1);
+    let timeout = Duration::from_secs(pages as u64 * 30);
     let bytes = tokio::fs::read(pdf_path)
         .await
         .map_err(|e| CloudMistralError::Network(format!("read pdf: {e}")))?;
-    call(&bytes, "application/pdf", prompt, api_key).await
+    call_with_timeout(&bytes, "application/pdf", api_key, timeout).await
 }
 
 #[cfg(test)]
