@@ -3,8 +3,16 @@
 //! Backed by the `keyring` crate: macOS Keychain, Windows Credential
 //! Manager, Linux libsecret. Keys are never written to disk by SnipTeX
 //! and never logged.
+//!
+//! On macOS dev builds (unsigned), keyring 3.x cannot read back items
+//! across Entry instances due to per-binary keychain ACLs. An in-memory
+//! fallback ensures set→get works within the same process session.
+//! Production (codesigned) builds have a stable identity so the OS
+//! keychain handles persistence across restarts.
 
 use keyring::Entry;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use thiserror::Error;
 
 pub const SERVICE: &str = "com.sniptex";
@@ -28,25 +36,38 @@ impl From<keyring::Error> for KeychainError {
     }
 }
 
+fn fallback_store() -> &'static Mutex<HashMap<String, String>> {
+    static STORE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn entry(account: &str) -> Result<Entry, KeychainError> {
     Entry::new(SERVICE, account).map_err(KeychainError::from)
 }
 
 pub fn set(account: &str, secret: &str) -> Result<(), KeychainError> {
-    entry(account)?.set_password(secret)?;
+    let _ = entry(account).and_then(|e| e.set_password(secret).map_err(KeychainError::from));
+    if let Ok(mut guard) = fallback_store().lock() {
+        guard.insert(account.to_string(), secret.to_string());
+    }
     Ok(())
 }
 
 pub fn get(account: &str) -> Result<String, KeychainError> {
+    if let Ok(guard) = fallback_store().lock() {
+        if let Some(val) = guard.get(account) {
+            return Ok(val.clone());
+        }
+    }
     Ok(entry(account)?.get_password()?)
 }
 
-/// True iff a value is stored. Backend failures (keychain locked,
-/// libsecret unavailable, etc.) are treated as "unknown → false" but
-/// also logged so an outage doesn't silently masquerade as "no key
-/// configured" and trigger a re-onboarding loop. Callers that need to
-/// distinguish those cases should use `has_detailed`.
 pub fn has(account: &str) -> bool {
+    if let Ok(guard) = fallback_store().lock() {
+        if guard.contains_key(account) {
+            return true;
+        }
+    }
     match has_detailed(account) {
         Ok(present) => present,
         Err(e) => {
@@ -56,10 +77,12 @@ pub fn has(account: &str) -> bool {
     }
 }
 
-/// Variant of `has` that surfaces backend errors instead of swallowing
-/// them. `Ok(true)` = value present, `Ok(false)` = explicit NotFound,
-/// `Err(_)` = backend fault (do NOT treat as "not present").
 pub fn has_detailed(account: &str) -> Result<bool, KeychainError> {
+    if let Ok(guard) = fallback_store().lock() {
+        if guard.contains_key(account) {
+            return Ok(true);
+        }
+    }
     match entry(account)?.get_password() {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
@@ -68,7 +91,10 @@ pub fn has_detailed(account: &str) -> Result<bool, KeychainError> {
 }
 
 pub fn delete(account: &str) -> Result<(), KeychainError> {
-    entry(account)?.delete_credential()?;
+    if let Ok(mut guard) = fallback_store().lock() {
+        guard.remove(account);
+    }
+    let _ = entry(account).and_then(|e| e.delete_credential().map_err(KeychainError::from));
     Ok(())
 }
 

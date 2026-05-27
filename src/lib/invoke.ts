@@ -58,4 +58,12 @@ export const tauri = {
     invoke<HistoryRecord>("rerun_snip", { recordId, agentId }),
   exportRecord: (id: number, format: ExportFormat) =>
     invoke<string>("export_record", { id, format }),
+
+  // API key management (used by Settings UI / onboarding)
+  setApiKey: (provider: string, key: string) =>
+    invoke<void>("set_api_key", { provider, key }),
+  hasApiKey: (provider: string) =>
+    invoke<boolean>("has_api_key", { provider }),
+  deleteApiKey: (provider: string) =>
+    invoke<void>("delete_api_key", { provider }),
 };

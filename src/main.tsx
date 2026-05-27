@@ -7,7 +7,13 @@ import PreviewWindow from "./windows/preview-window";
 import SettingsWindow from "./windows/settings-window";
 import HistoryWindow from "./windows/history-window";
 import OnboardingWindow from "./windows/onboarding-window";
+import { tauri } from "./lib/invoke";
 import "./styles/globals.css";
+
+// Expose tauri invoke helpers on window for devtools console access.
+if (import.meta.env.DEV) {
+  (window as any).tauri = tauri;
+}
 
 const label = (() => {
   try {
