@@ -37,7 +37,7 @@ export default function PreviewWindow() {
 
   const event = useSnipResult();
   const snip = event?.result ?? null;
-  const autoHideMs = useSettingsStore((s) => s.autoHideMs);
+  const autoHideMs = useSettingsStore((s) => s.preview_duration_ms);
 
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);

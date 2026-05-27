@@ -4,13 +4,15 @@ mod commands;
 #[cfg(desktop)]
 mod hotkey;
 pub mod ocr;
+pub mod settings;
 mod state;
 pub mod storage;
 mod tray;
 
 use commands::{
-    delete_api_key, delete_record, detect_agents, export_record, get_history, has_api_key, hello,
-    hide_window, rerun_snip, run_snip, search_history, set_api_key, show_window, test_agent,
+    delete_api_key, delete_record, detect_agents, export_record, get_history, get_settings,
+    has_api_key, hello, hide_window, rebind_hotkey, rerun_snip, run_snip, search_history,
+    set_api_key, set_launch_at_login, show_window, test_agent, update_settings,
 };
 
 use tauri::Manager;
@@ -54,9 +56,6 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            // Phase 7: open snip-history SQLite + WAL + ensure images/thumbs
-            // dirs exist. Hard-failing on init keeps the bug close to the
-            // root cause — without storage the rest of the app is useless.
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -65,16 +64,24 @@ pub fn run() {
                 .expect("storage init failed");
             app.manage(history_store);
 
+            let settings_store = settings::SettingsStore::load(app.handle());
+            let show_onboarding = !settings_store.get().onboarding_completed;
+            app.manage(settings_store);
+
             #[cfg(desktop)]
             {
                 app.manage(state::AppState::new());
 
                 tray::init_tray(app.handle())?;
+                hotkey::register_saved_shortcut(app.handle());
                 hotkey::verify_registration(app.handle());
 
-                // (Don't auto-open Preview DevTools — on macOS that
-                // force-shows the hidden window. Right-click any
-                // visible Preview after a snip to inspect.)
+                if show_onboarding {
+                    if let Some(w) = app.get_webview_window("onboarding") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
             }
             Ok(())
         })
@@ -92,7 +99,11 @@ pub fn run() {
             search_history,
             delete_record,
             rerun_snip,
-            export_record
+            export_record,
+            get_settings,
+            update_settings,
+            rebind_hotkey,
+            set_launch_at_login
         ])
         .build(tauri::generate_context!())
         .expect("error while building SnipTeX")

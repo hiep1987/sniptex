@@ -1,32 +1,54 @@
 import { create } from "zustand";
+import {
+  tauri,
+  type AppSettings,
+  type SettingsPatch,
+  type ThemeMode,
+  type OutputFormat,
+  type HistorySizeOption,
+} from "@/lib/invoke";
 
-// Phase 8 will replace this skeleton with persisted user preferences
-// backed by tauri-plugin-store. For now, keep the in-memory shape so
-// Settings/Preview windows can already wire their UI to it.
+export type { ThemeMode, OutputFormat, HistorySizeOption };
 
-export type ThemePreference = "light" | "dark" | "system";
-export type DefaultFormat = "auto" | "inline" | "display" | "markdown" | "plain";
+type SettingsState = AppSettings & {
+  loaded: boolean;
+  fetch: () => Promise<void>;
+  patch: (p: SettingsPatch) => Promise<void>;
+};
 
-export type SettingsState = {
-  theme: ThemePreference;
-  defaultFormat: DefaultFormat;
-  /** Preview window auto-hide duration in milliseconds. */
-  autoHideMs: number;
-  /** Default Format Toggle for the LaTeX-tabular toggle (Phase 9). */
-  preferLatexTables: boolean;
-  setTheme: (t: ThemePreference) => void;
-  setDefaultFormat: (f: DefaultFormat) => void;
-  setAutoHideMs: (ms: number) => void;
-  setPreferLatexTables: (v: boolean) => void;
+const DEFAULTS: AppSettings = {
+  hotkey: "Command+Shift+M",
+  agent_priority: ["codex", "cloud-gemini", "cloud-mistral"],
+  default_format: "smart",
+  copy_as_formats: ["smart", "inline", "display", "plain", "markdown"],
+  history_size: "one_hundred",
+  preview_duration_ms: 3000,
+  sound_on_success: true,
+  launch_at_login: false,
+  theme: "system",
+  onboarding_completed: false,
+  cloud_mode_enabled: false,
 };
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  theme: "system",
-  defaultFormat: "auto",
-  autoHideMs: 3000,
-  preferLatexTables: false,
-  setTheme: (theme) => set({ theme }),
-  setDefaultFormat: (defaultFormat) => set({ defaultFormat }),
-  setAutoHideMs: (autoHideMs) => set({ autoHideMs }),
-  setPreferLatexTables: (preferLatexTables) => set({ preferLatexTables }),
+  ...DEFAULTS,
+  loaded: false,
+
+  fetch: async () => {
+    try {
+      const s = await tauri.getSettings();
+      set({ ...s, loaded: true });
+    } catch (e) {
+      console.error("[settings] fetch failed", e);
+    }
+  },
+
+  patch: async (p) => {
+    try {
+      const updated = await tauri.updateSettings(p);
+      set(updated);
+    } catch (e) {
+      console.error("[settings] patch failed", e);
+    }
+  },
 }));

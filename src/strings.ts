@@ -33,7 +33,6 @@ export const strings = {
       formats: "Formats",
       about: "About",
     },
-    comingSoon: "This section is wired up in a later phase.",
   },
   history: {
     title: "History",
@@ -48,10 +47,10 @@ export const strings = {
     skip: "Skip",
     steps: [
       "Welcome",
-      "Install an OCR agent",
-      "Bring your own key (optional)",
-      "Pick your hotkey",
-      "You're ready",
+      "Install agent",
+      "Cloud key",
+      "Hotkey",
+      "Ready",
     ],
   },
 } as const;

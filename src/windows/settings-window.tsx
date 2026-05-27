@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { Toaster } from "sonner";
 import { cn } from "@/lib/cn";
 import { strings } from "@/strings";
+import { useSettingsStore } from "@/stores/settings-store";
+import GeneralTab from "./settings/general-tab";
+import AgentsTab from "./settings/agents-tab";
+import HotkeysTab from "./settings/hotkeys-tab";
+import FormatsTab from "./settings/formats-tab";
+import AboutTab from "./settings/about-tab";
 
 type TabKey = "general" | "agents" | "hotkeys" | "formats" | "about";
 
@@ -13,11 +20,21 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "about", label: strings.settings.tabs.about },
 ];
 
+const TAB_COMPONENTS: Record<TabKey, React.ComponentType> = {
+  general: GeneralTab,
+  agents: AgentsTab,
+  hotkeys: HotkeysTab,
+  formats: FormatsTab,
+  about: AboutTab,
+};
+
 export default function SettingsWindow() {
   const [active, setActive] = useState<TabKey>("general");
+  const fetch = useSettingsStore((s) => s.fetch);
+
+  useEffect(() => { fetch(); }, [fetch]);
 
   useEffect(() => {
-    // Tray's "About SnipTeX" jumps directly to the About tab.
     let cancelled = false;
     let off: UnlistenFn | undefined;
 
@@ -35,6 +52,8 @@ export default function SettingsWindow() {
       off?.();
     };
   }, []);
+
+  const TabContent = TAB_COMPONENTS[active];
 
   return (
     <main className="flex h-dvh w-dvw bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -60,20 +79,9 @@ export default function SettingsWindow() {
         </nav>
       </aside>
       <section className="flex-1 overflow-auto p-6">
-        <SettingsTabPlaceholder tab={active} />
+        <TabContent />
       </section>
+      <Toaster richColors closeButton position="bottom-right" />
     </main>
-  );
-}
-
-function SettingsTabPlaceholder({ tab }: { tab: TabKey }) {
-  const label = TABS.find((t) => t.key === tab)?.label ?? tab;
-  return (
-    <div className="max-w-xl">
-      <h2 className="mb-2 text-lg font-semibold">{label}</h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        {strings.settings.comingSoon}
-      </p>
-    </div>
   );
 }

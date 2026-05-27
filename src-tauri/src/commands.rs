@@ -8,6 +8,8 @@ use tauri::{
     AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize, Manager, State,
     WebviewWindow,
 };
+#[cfg(desktop)]
+use tauri_plugin_autostart::ManagerExt;
 use uuid::Uuid;
 
 use crate::agents::{
@@ -19,6 +21,7 @@ use crate::capture::{
     SelectionRect,
 };
 use crate::ocr::{self, dispatcher::DispatchError, smart_format::DetectedType};
+use crate::settings::{AppSettings, SettingsPatch, SettingsStore};
 use crate::state::TrayStatus;
 use crate::storage::{self, history as history_repo, HistoryStore};
 use crate::tray;
@@ -865,4 +868,68 @@ fn format_export(text: &str, format: &ExportFormat) -> String {
             }
         }
     }
+}
+
+// -----------------------------------------------------------------------
+// Settings commands
+// -----------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_settings(store: State<'_, SettingsStore>) -> AppSettings {
+    store.get()
+}
+
+#[tauri::command]
+pub fn update_settings(
+    store: State<'_, SettingsStore>,
+    patch: SettingsPatch,
+) -> Result<AppSettings, String> {
+    store.update(patch)
+}
+
+#[tauri::command]
+pub fn rebind_hotkey(
+    app: AppHandle,
+    new_shortcut: String,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        crate::hotkey::rebind(&app, &new_shortcut)?;
+        let settings_store = app.state::<SettingsStore>();
+        settings_store.update(SettingsPatch {
+            hotkey: Some(new_shortcut),
+            ..Default::default()
+        })?;
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, new_shortcut);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_launch_at_login(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let autostart = app.autolaunch();
+        if enabled {
+            autostart.enable().map_err(|e| format!("enable autostart: {e}"))?;
+        } else {
+            autostart.disable().map_err(|e| format!("disable autostart: {e}"))?;
+        }
+        let settings_store = app.state::<SettingsStore>();
+        settings_store.update(SettingsPatch {
+            launch_at_login: Some(enabled),
+            ..Default::default()
+        })?;
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, enabled);
+    }
+    Ok(())
 }

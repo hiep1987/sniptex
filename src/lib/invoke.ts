@@ -30,6 +30,50 @@ export type HistoryRecord = {
 
 export type ExportFormat = "latex" | "markdown" | "plain";
 
+export type ThemeMode = "system" | "light" | "dark";
+export type OutputFormat =
+  | "smart"
+  | "inline"
+  | "display"
+  | "plain"
+  | "markdown"
+  | "math_ml"
+  | "unicode_pretty";
+export type HistorySizeOption =
+  | "fifty"
+  | "one_hundred"
+  | "five_hundred"
+  | "unlimited";
+
+export type AppSettings = {
+  hotkey: string;
+  agent_priority: string[];
+  default_format: OutputFormat;
+  copy_as_formats: OutputFormat[];
+  history_size: HistorySizeOption;
+  preview_duration_ms: number;
+  sound_on_success: boolean;
+  launch_at_login: boolean;
+  theme: ThemeMode;
+  onboarding_completed: boolean;
+  cloud_mode_enabled: boolean;
+};
+
+export type SettingsPatch = Partial<AppSettings>;
+
+export type AgentKind = "CliBin" | "CloudApi";
+export type AgentInfo = {
+  spec: {
+    id: string;
+    display_name: string;
+    binary_names: string[];
+    supports_vision: boolean;
+    kind: AgentKind;
+  };
+  binary_path: string;
+  version: string | null;
+};
+
 export type WindowLabel =
   | "preview"
   | "settings"
@@ -59,11 +103,28 @@ export const tauri = {
   exportRecord: (id: number, format: ExportFormat) =>
     invoke<string>("export_record", { id, format }),
 
-  // API key management (used by Settings UI / onboarding)
+  // API key management
   setApiKey: (provider: string, key: string) =>
     invoke<void>("set_api_key", { provider, key }),
   hasApiKey: (provider: string) =>
     invoke<boolean>("has_api_key", { provider }),
   deleteApiKey: (provider: string) =>
     invoke<void>("delete_api_key", { provider }),
+
+  // Agent detection
+  detectAgents: () => invoke<AgentInfo[]>("detect_agents"),
+  testAgent: (agentId: string, imagePath: string) =>
+    invoke<{ ok: boolean; detected: DetectedType; char_count: number; preview: string }>(
+      "test_agent",
+      { agentId, imagePath },
+    ),
+
+  // Settings
+  getSettings: () => invoke<AppSettings>("get_settings"),
+  updateSettings: (patch: SettingsPatch) =>
+    invoke<AppSettings>("update_settings", { patch }),
+  rebindHotkey: (newShortcut: string) =>
+    invoke<void>("rebind_hotkey", { newShortcut }),
+  setLaunchAtLogin: (enabled: boolean) =>
+    invoke<void>("set_launch_at_login", { enabled }),
 };
