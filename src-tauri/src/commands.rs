@@ -257,8 +257,13 @@ async fn run_snip_inner(
     let cropped_guard = TempFileGuard::new(cropped_path.clone());
     let cropped_str = cropped_path.to_string_lossy().to_string();
 
+    let priority = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get().agent_priority)
+        .unwrap_or_default();
+
     let ocr_started = Instant::now();
-    let (text, agent) = run_ocr_for_path(agent_id, &cropped_str).await?;
+    let (text, agent) = run_ocr_for_path(agent_id, &cropped_str, &priority).await?;
     let latency_ms = ocr_started.elapsed().as_millis() as i64;
     let detected = ocr::detect_type(&text);
 
@@ -481,6 +486,7 @@ async fn show_overlay_and_await_selection(
 async fn run_ocr_for_path(
     agent_id: Option<String>,
     image_path: &str,
+    priority: &[String],
 ) -> Result<(String, String), String> {
     let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
         .await
@@ -500,7 +506,7 @@ async fn run_ocr_for_path(
             .map_err(stringify_dispatch_error)?;
         Ok((text, agent_id_str))
     } else {
-        let (text, agent) = ocr::run_with_fallback(&installed, image_path)
+        let (text, agent) = ocr::run_with_fallback(&installed, image_path, priority)
             .await
             .map_err(stringify_dispatch_error)?;
         Ok((text, agent.spec.id.to_string()))
@@ -797,8 +803,12 @@ pub async fn rerun_snip(
         return Err(format!("image missing: {image_path}"));
     }
     log::info!("[rerun] record={record_id} agent={agent_id} image={image_path}");
+    let priority = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get().agent_priority)
+        .unwrap_or_default();
     let started = Instant::now();
-    let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path).await?;
+    let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path, &priority).await?;
     let latency_ms = started.elapsed().as_millis() as i64;
     if used_agent == GEMINI_CLI_ID {
         ocr::validate_rerun_consistency(&record.output_text, &text)

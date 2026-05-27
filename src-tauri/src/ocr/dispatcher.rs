@@ -27,12 +27,12 @@ use crate::agents::cloud_mistral_api::{self, CloudMistralError};
 use crate::agents::keychain;
 use crate::agents::registry::{
     build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CODEX_ID,
-    DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID,
+    GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
 
-const DISPATCH_TIMEOUT: Duration = Duration::from_secs(90);
+const DISPATCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 pub enum DispatchError {
@@ -309,13 +309,14 @@ async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, 
     Ok(cleaned)
 }
 
-/// Try `agents` in order, return the first `Ok`. Last error is propagated
-/// so callers can surface "all agents failed: <reason>".
+/// Try `agents` in the given `priority` order, return the first `Ok`.
+/// Last error is propagated so callers can surface "all agents failed".
 pub async fn run_with_fallback<'a>(
     agents: &'a [AgentInfo],
     image_path: &str,
+    priority: &[String],
 ) -> Result<(String, &'a AgentInfo), DispatchError> {
-    let ordered = order_by_default_chain(agents);
+    let ordered = order_by_priority(agents, priority);
     if ordered.is_empty() {
         return Err(DispatchError::AgentNotAvailable("<none installed>".into()));
     }
@@ -332,10 +333,16 @@ pub async fn run_with_fallback<'a>(
     Err(last_err.unwrap_or(DispatchError::AgentNotAvailable("<none responded>".into())))
 }
 
-fn order_by_default_chain(agents: &[AgentInfo]) -> Vec<&AgentInfo> {
+fn order_by_priority<'a>(agents: &'a [AgentInfo], priority: &[String]) -> Vec<&'a AgentInfo> {
     let mut ordered: Vec<&AgentInfo> = Vec::new();
-    for id in DEFAULT_FALLBACK_CHAIN {
-        if let Some(a) = agents.iter().find(|a| &a.spec.id == id) {
+    for id in priority {
+        if let Some(a) = agents.iter().find(|a| a.spec.id == id) {
+            ordered.push(a);
+        }
+    }
+    // Append any installed agents not listed in priority.
+    for a in agents {
+        if !ordered.iter().any(|o| o.spec.id == a.spec.id) {
             ordered.push(a);
         }
     }

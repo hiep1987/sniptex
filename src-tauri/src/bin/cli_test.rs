@@ -89,7 +89,9 @@ async fn main() -> ExitCode {
         }
         None => {
             eprintln!("\nrunning OCR with fallback chain");
-            run_with_fallback(&installed, &image)
+            let default_priority: Vec<String> = sniptex_lib::agents::registry::DEFAULT_FALLBACK_CHAIN
+                .iter().map(|s| s.to_string()).collect();
+            run_with_fallback(&installed, &image, &default_priority)
                 .await
                 .map(|(t, a)| (t, a.clone()))
         }

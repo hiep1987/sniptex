@@ -75,11 +75,7 @@ pub const AGENTS: &[AgentSpec] = &[
     },
 ];
 
-/// Default fallback order: Codex first (most reliable per Session-3),
-/// then cloud Gemini (no local install required). Gemini CLI is omitted
-/// because live OCR validation showed it can return unrelated content
-/// while also invoking tools/skills in headless mode.
-pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID];
+pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID];
 
 pub fn spec_by_id(id: &str) -> Option<&'static AgentSpec> {
     AGENTS.iter().find(|a| a.id == id)
