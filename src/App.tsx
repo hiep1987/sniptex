@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Toaster, toast } from "sonner";
 import {
   Camera,
+  FileText,
   History as HistoryIcon,
   Keyboard,
   Settings as SettingsIcon,
@@ -19,14 +21,14 @@ import { strings } from "@/strings";
  * here are a convenience entry point.
  */
 type SnipStatus = "idle" | "capturing" | "processing" | "error";
+type PdfProgress = { page: number; total: number };
 
 export default function App() {
   const [hello, setHello] = useState<HelloReply | null>(null);
   const [lastSnip, setLastSnip] = useState<SnipResult | null>(null);
-  // Driven by the Rust-emitted `snip-state` event so the button reflects
-  // ANY snip trigger — button click, global hotkey, or tray menu — not
-  // just clicks on this button.
   const [snipStatus, setSnipStatus] = useState<SnipStatus>("idle");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
   const { pressCount, lastPressedAt } = useHotkeyStore();
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export default function App() {
     let cancelled = false;
     let offComplete: UnlistenFn | undefined;
     let offState: UnlistenFn | undefined;
+    let offPdfProgress: UnlistenFn | undefined;
 
     listen<SnipResult>("snip-complete", (event) => {
       if (cancelled) return;
@@ -62,24 +65,57 @@ export default function App() {
         console.error("[main] snip-state listen failed", err),
       );
 
+    listen<PdfProgress>("pdf-progress", (event) => {
+      if (cancelled) return;
+      setPdfProgress(event.payload);
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else offPdfProgress = fn;
+      })
+      .catch((err) =>
+        console.error("[main] pdf-progress listen failed", err),
+      );
+
     return () => {
       cancelled = true;
       offComplete?.();
       offState?.();
+      offPdfProgress?.();
     };
   }, []);
 
   const snipping = snipStatus !== "idle" && snipStatus !== "error";
+  const busy = snipping || pdfBusy;
 
   const handleSnip = async () => {
-    if (snipping) return;
+    if (busy) return;
     try {
       const result = await tauri.runSnip();
       if (result.status === "cancelled") toast("Snip cancelled");
-      // On success Rust emits `snip-complete` → PreviewWindow renders.
-      // `snip-state` events handle button label across the whole flow.
     } catch (err) {
       toast.error("Snip failed", { description: String(err) });
+    }
+  };
+
+  const handlePdfOpen = async () => {
+    if (busy) return;
+    try {
+      const path = await open({
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+        multiple: false,
+        directory: false,
+      });
+      if (!path) return;
+
+      setPdfBusy(true);
+      setPdfProgress(null);
+      await tauri.runPdfOcr(path);
+    } catch (err) {
+      toast.error(strings.pdf.error, { description: String(err) });
+    } finally {
+      setPdfBusy(false);
+      setPdfProgress(null);
     }
   };
 
@@ -95,19 +131,34 @@ export default function App() {
       </header>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <button
-          type="button"
-          onClick={handleSnip}
-          disabled={snipping}
-          className="mx-auto inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-        >
-          <Camera className="size-4" />
-          {snipStatus === "capturing"
-            ? "Capturing…"
-            : snipStatus === "processing"
-            ? "Processing…"
-            : "Snip now"}
-        </button>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={handleSnip}
+            disabled={busy}
+            className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          >
+            <Camera className="size-4" />
+            {snipStatus === "capturing"
+              ? "Capturing…"
+              : snipStatus === "processing"
+              ? "Processing…"
+              : "Snip now"}
+          </button>
+          <button
+            type="button"
+            onClick={handlePdfOpen}
+            disabled={busy}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <FileText className="size-4" />
+            {pdfBusy
+              ? pdfProgress
+                ? strings.pdf.pageProgress(pdfProgress.page, pdfProgress.total)
+                : strings.pdf.processing
+              : strings.pdf.open}
+          </button>
+        </div>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           Or press{" "}
           <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] dark:bg-slate-800">

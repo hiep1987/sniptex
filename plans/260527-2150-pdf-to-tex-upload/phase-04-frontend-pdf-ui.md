@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Frontend: File Picker + PDF Preview + Progress"
-status: pending
+status: done
 priority: P1
 effort: "3h"
 dependencies: [3]
@@ -49,13 +49,13 @@ No pdf.js needed in v1 — the preview window already renders TeX/Markdown outpu
 
 ## Success Criteria
 
-- [ ] "Open PDF" button visible in main window
-- [ ] File picker only shows .pdf files
-- [ ] Progress text updates per page during CLI processing
-- [ ] Result appears in preview window after completion
-- [ ] Result appears in history
-- [ ] Button disabled during processing
-- [ ] Error toast on failure
+- [x] "Open PDF" button visible in main window
+- [x] File picker only shows .pdf files
+- [x] Progress text updates per page during CLI processing
+- [x] Result appears in preview window after completion (via snip-complete event)
+- [x] Result appears in history (persisted in run_pdf_ocr)
+- [x] Button disabled during processing (both Snip and PDF buttons)
+- [x] Error toast on failure
 
 ## Risk Assessment
 

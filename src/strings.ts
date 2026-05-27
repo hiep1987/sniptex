@@ -39,6 +39,13 @@ export const strings = {
     searchPlaceholder: "Search snips…",
     empty: "No snips yet. Capture one with the hotkey to populate history.",
   },
+  pdf: {
+    open: "Open PDF",
+    processing: "Processing PDF…",
+    pageProgress: (page: number, total: number) =>
+      `Processing page ${page} of ${total}…`,
+    error: "PDF processing failed",
+  },
   onboarding: {
     title: "Welcome to SnipTeX",
     next: "Next",
