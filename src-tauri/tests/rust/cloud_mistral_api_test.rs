@@ -61,14 +61,14 @@ fn test_parse_null_markdown() {
 }
 
 #[test]
-fn test_parse_multi_page_returns_first() {
+fn test_parse_multi_page_concatenates_all() {
     let raw = r#"{
         "pages": [
             { "markdown": "page one" },
             { "markdown": "page two" }
         ]
     }"#;
-    assert_eq!(parse_response(raw).unwrap(), "page one");
+    assert_eq!(parse_response(raw).unwrap(), "page one\n\npage two");
 }
 
 #[test]

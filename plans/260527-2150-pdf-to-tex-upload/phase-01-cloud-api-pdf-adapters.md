@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Cloud API PDF Adapters"
-status: pending
+status: done
 priority: P1
 effort: "3h"
 dependencies: []
@@ -40,10 +40,10 @@ Extend Gemini and Mistral cloud API adapters to accept PDF bytes directly (no im
 
 ## Success Criteria
 
-- [ ] `mime_for("doc.pdf")` returns `"application/pdf"` (Gemini)
-- [ ] `call_with_pdf_path` compiles and type-checks for both adapters
-- [ ] Mistral `parse_response` concatenates all pages, not just first
-- [ ] Existing image tests still pass
+- [x] `mime_for("doc.pdf")` returns `"application/pdf"` (Gemini)
+- [x] `call_with_pdf_path` compiles and type-checks for both adapters
+- [x] Mistral `parse_response` concatenates all pages, not just first
+- [x] Existing image tests still pass
 
 ## Risk Assessment
 

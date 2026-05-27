@@ -36,10 +36,18 @@ struct OcrRequest {
 }
 
 #[derive(Serialize)]
-struct OcrDocument {
-    #[serde(rename = "type")]
-    doc_type: &'static str,
-    image_url: String,
+#[serde(untagged)]
+enum OcrDocument {
+    Image {
+        #[serde(rename = "type")]
+        doc_type: &'static str,
+        image_url: String,
+    },
+    Document {
+        #[serde(rename = "type")]
+        doc_type: &'static str,
+        document_url: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -56,9 +64,11 @@ fn endpoint() -> &'static str {
     "https://api.mistral.ai/v1/ocr"
 }
 
-pub fn mime_for(image_path: &str) -> &'static str {
-    let lower = image_path.to_ascii_lowercase();
-    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+pub fn mime_for(path: &str) -> &'static str {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".pdf") {
+        "application/pdf"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
         "image/jpeg"
     } else if lower.ends_with(".webp") {
         "image/webp"
@@ -70,13 +80,17 @@ pub fn mime_for(image_path: &str) -> &'static str {
 pub fn parse_response(text: &str) -> Result<String, CloudMistralError> {
     let parsed: OcrResponse =
         serde_json::from_str(text).map_err(|e| CloudMistralError::Parse(e.to_string()))?;
-    let markdown = parsed
-        .pages
-        .and_then(|mut pages| pages.drain(..).next())
-        .and_then(|page| page.markdown)
-        .filter(|t| !t.is_empty())
-        .ok_or(CloudMistralError::EmptyResponse)?;
-    Ok(markdown)
+    let pages = parsed.pages.ok_or(CloudMistralError::EmptyResponse)?;
+    let combined: String = pages
+        .into_iter()
+        .filter_map(|p| p.markdown)
+        .filter(|m| !m.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    if combined.is_empty() {
+        return Err(CloudMistralError::EmptyResponse);
+    }
+    Ok(combined)
 }
 
 pub fn redact_key(s: &str) -> String {
@@ -109,12 +123,20 @@ pub async fn call(
         .map_err(|e| CloudMistralError::Network(e.to_string()))?;
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(image_bytes);
-    let body = OcrRequest {
-        model: CLOUD_MISTRAL_MODEL,
-        document: OcrDocument {
+    let document = if mime_type == "application/pdf" {
+        OcrDocument::Document {
+            doc_type: "document_url",
+            document_url: format!("data:{mime_type};base64,{encoded}"),
+        }
+    } else {
+        OcrDocument::Image {
             doc_type: "image_url",
             image_url: format!("data:{mime_type};base64,{encoded}"),
-        },
+        }
+    };
+    let body = OcrRequest {
+        model: CLOUD_MISTRAL_MODEL,
+        document,
     };
 
     let resp = client
@@ -160,6 +182,17 @@ pub async fn call_with_image_path(
     call(&bytes, mime_for(image_path), prompt, api_key).await
 }
 
+pub async fn call_with_pdf_path(
+    pdf_path: &str,
+    prompt: &str,
+    api_key: &str,
+) -> Result<String, CloudMistralError> {
+    let bytes = tokio::fs::read(pdf_path)
+        .await
+        .map_err(|e| CloudMistralError::Network(format!("read pdf: {e}")))?;
+    call(&bytes, "application/pdf", prompt, api_key).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +221,34 @@ mod tests {
         assert_eq!(mime_for("snap.jpeg"), "image/jpeg");
         assert_eq!(mime_for("snap.webp"), "image/webp");
         assert_eq!(mime_for("snap.gif"), "image/png");
+        assert_eq!(mime_for("document.pdf"), "application/pdf");
+        assert_eq!(mime_for("document.PDF"), "application/pdf");
+    }
+
+    #[test]
+    fn parse_response_concatenates_all_pages() {
+        let json = r#"{"pages":[{"markdown":"page 1"},{"markdown":"page 2"},{"markdown":"page 3"}]}"#;
+        let result = parse_response(json).unwrap();
+        assert_eq!(result, "page 1\n\npage 2\n\npage 3");
+    }
+
+    #[test]
+    fn parse_response_single_page() {
+        let json = r#"{"pages":[{"markdown":"only page"}]}"#;
+        let result = parse_response(json).unwrap();
+        assert_eq!(result, "only page");
+    }
+
+    #[test]
+    fn parse_response_skips_empty_pages() {
+        let json = r#"{"pages":[{"markdown":"page 1"},{"markdown":""},{"markdown":"page 3"}]}"#;
+        let result = parse_response(json).unwrap();
+        assert_eq!(result, "page 1\n\npage 3");
+    }
+
+    #[test]
+    fn parse_response_all_empty_returns_error() {
+        let json = r#"{"pages":[{"markdown":""}]}"#;
+        assert!(parse_response(json).is_err());
     }
 }

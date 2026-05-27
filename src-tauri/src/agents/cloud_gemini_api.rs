@@ -81,9 +81,11 @@ fn endpoint(api_key: &str) -> String {
     )
 }
 
-fn mime_for(image_path: &str) -> &'static str {
-    let lower = image_path.to_ascii_lowercase();
-    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+fn mime_for(path: &str) -> &'static str {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".pdf") {
+        "application/pdf"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
         "image/jpeg"
     } else if lower.ends_with(".webp") {
         "image/webp"
@@ -171,6 +173,19 @@ pub async fn call_with_image_path(
     call(&bytes, mime_for(image_path), prompt, api_key).await
 }
 
+/// Convenience wrapper for PDF files: read the PDF off disk and call the
+/// API with `application/pdf` mime. Gemini processes all pages in one shot.
+pub async fn call_with_pdf_path(
+    pdf_path: &str,
+    prompt: &str,
+    api_key: &str,
+) -> Result<String, CloudGeminiError> {
+    let bytes = tokio::fs::read(pdf_path)
+        .await
+        .map_err(|e| CloudGeminiError::Network(format!("read pdf: {e}")))?;
+    call(&bytes, "application/pdf", prompt, api_key).await
+}
+
 /// Best-effort redaction of an `AIza...` Google API key from error
 /// strings so we can attach upstream messages without leaking secrets.
 fn redact_key(s: &str) -> String {
@@ -201,5 +216,7 @@ mod tests {
         assert_eq!(mime_for("snap.jpeg"), "image/jpeg");
         assert_eq!(mime_for("snap.webp"), "image/webp");
         assert_eq!(mime_for("snap.unknown"), "image/png");
+        assert_eq!(mime_for("document.pdf"), "application/pdf");
+        assert_eq!(mime_for("document.PDF"), "application/pdf");
     }
 }

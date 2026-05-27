@@ -22,7 +22,7 @@ Add an "Open PDF" button to the main window. User picks a .pdf file, SnipTeX sen
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Cloud API PDF adapters](./phase-01-cloud-api-pdf-adapters.md) | Pending |
+| 1 | [Cloud API PDF adapters](./phase-01-cloud-api-pdf-adapters.md) | Done |
 | 2 | [CLI agent PDF-via-image fallback](./phase-02-cli-agent-pdf-via-image.md) | Pending |
 | 3 | [Tauri command + dispatcher wiring](./phase-03-tauri-command-dispatcher.md) | Pending |
 | 4 | [Frontend: file picker + PDF preview + progress](./phase-04-frontend-pdf-ui.md) | Pending |
