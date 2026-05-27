@@ -43,9 +43,11 @@ export default function AgentsTab() {
 
   useEffect(() => { scan(); }, [scan]);
 
-  const allIds = agent_priority.length > 0
-    ? agent_priority
-    : ["codex", "cloud-gemini", "cloud-mistral", "gemini-cli"];
+  const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "gemini-cli"];
+  const allIds = [
+    ...agent_priority.filter((id) => ALL_KNOWN.includes(id)),
+    ...ALL_KNOWN.filter((id) => !agent_priority.includes(id)),
+  ];
 
   const moveUp = (idx: number) => {
     if (idx === 0) return;
