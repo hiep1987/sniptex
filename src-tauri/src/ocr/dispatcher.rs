@@ -107,7 +107,9 @@ pub async fn run_ocr(agent: &AgentInfo, image_path: &str) -> Result<String, Disp
 
 /// OCR a PDF via a CLI agent: render each page to a temp PNG, run OCR on
 /// each sequentially, and concatenate results. Temp dir cleaned up on all
-/// exit paths via RAII.
+/// exit paths via RAII. Overall budget scales to `pages * DISPATCH_TIMEOUT`
+/// — per-page enforcement still lives in `run_cli_agent`; the outer wrap
+/// guards against runaway iteration if a per-page error path stalled.
 pub async fn run_pdf_cli(
     agent: &AgentInfo,
     pdf_path: &str,
@@ -128,17 +130,29 @@ pub async fn run_pdf_cli(
         return Err(DispatchError::EmptyOutput);
     }
 
-    let mut parts: Vec<String> = Vec::with_capacity(page_pngs.len());
-    for (i, png) in page_pngs.iter().enumerate() {
-        let path_str = png.to_string_lossy();
-        match run_cli_agent(agent, &path_str).await {
-            Ok(text) => parts.push(text),
-            Err(e) => {
-                log::warn!("[pdf-cli] page {} failed: {e}", i + 1);
-                return Err(e);
+    let total = page_pngs.len();
+    let overall_budget = DISPATCH_TIMEOUT.saturating_mul(total as u32);
+
+    let work = async {
+        let mut parts: Vec<String> = Vec::with_capacity(total);
+        for (i, png) in page_pngs.iter().enumerate() {
+            let path_str = png.to_string_lossy();
+            match run_cli_agent(agent, &path_str).await {
+                Ok(text) => parts.push(text),
+                Err(e) => {
+                    log::warn!("[pdf-cli] page {} failed: {e}", i + 1);
+                    return Err(e);
+                }
             }
         }
-    }
+        Ok(parts)
+    };
+
+    let parts = match timeout(overall_budget, work).await {
+        Ok(Ok(p)) => p,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err(DispatchError::Timeout(overall_budget.as_secs())),
+    };
 
     let combined = parts.join("\n\n");
     if combined.is_empty() {

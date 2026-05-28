@@ -833,6 +833,9 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
     }
 }
 
+/// Per-page CLI budget — mirrors the dispatcher's `DISPATCH_TIMEOUT`.
+const PDF_PER_PAGE_TIMEOUT: Duration = Duration::from_secs(30);
+
 async fn run_cli_pdf_ocr(
     app: &AppHandle,
     agent: &AgentInfo,
@@ -853,16 +856,36 @@ async fn run_cli_pdf_ocr(
         return Err("PDF has no pages".into());
     }
 
-    let mut parts: Vec<String> = Vec::with_capacity(total);
-    for (i, png) in page_pngs.iter().enumerate() {
-        let _ = app.emit("pdf-progress", PdfProgress { page: i + 1, total });
+    let overall_budget = PDF_PER_PAGE_TIMEOUT.saturating_mul(total as u32);
+    let app_for_progress = app.clone();
+    let pages: Vec<PathBuf> = page_pngs.clone();
+    let agent_clone = agent.clone();
 
-        let path_str = png.to_string_lossy().to_string();
-        let text = ocr::run_ocr(agent, &path_str)
-            .await
-            .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
-        parts.push(text);
-    }
+    let work = async move {
+        let mut parts: Vec<String> = Vec::with_capacity(total);
+        for (i, png) in pages.iter().enumerate() {
+            let _ = app_for_progress
+                .emit("pdf-progress", PdfProgress { page: i + 1, total });
+            let path_str = png.to_string_lossy().to_string();
+            let text = ocr::run_ocr(&agent_clone, &path_str)
+                .await
+                .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
+            parts.push(text);
+        }
+        Ok::<_, String>(parts)
+    };
+
+    let parts = match tokio::time::timeout(overall_budget, work).await {
+        Ok(Ok(p)) => p,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => {
+            return Err(format!(
+                "PDF OCR exceeded budget of {}s ({} pages × 30s)",
+                overall_budget.as_secs(),
+                total
+            ))
+        }
+    };
 
     Ok(parts.join("\n\n"))
 }

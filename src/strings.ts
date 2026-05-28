@@ -43,7 +43,8 @@ export const strings = {
     open: "Open PDF",
     processing: "Processing PDF…",
     pageProgress: (page: number, total: number) =>
-      `Processing page ${page} of ${total}…`,
+      `Page ${page}/${total}… (~30s/page)`,
+    estimate: (total: number) => `~${total * 30}s budget (${total} × 30s)`,
     error: "PDF processing failed",
   },
   onboarding: {
