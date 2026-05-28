@@ -722,13 +722,11 @@ pub async fn run_pdf_ocr(
     pdf_path: String,
     agent_id: Option<String>,
 ) -> Result<SnipResult, String> {
-    use crate::agents::registry::AgentKind;
-
     let path = Path::new(&pdf_path);
     if !path.exists() {
         return Err(format!("file not found: {pdf_path}"));
     }
-    if path.extension().and_then(|e| e.to_str()) != Some("pdf") {
+    if !is_pdf_path(&pdf_path) {
         return Err("expected a .pdf file".into());
     }
 
@@ -749,18 +747,7 @@ pub async fn run_pdf_ocr(
 
     let ocr_started = Instant::now();
 
-    // Routing:
-    //   - cloud-mistral: native OCR endpoint reliably handles multi-page PDFs.
-    //   - cloud-gemini: Gemini's PDF document modality voluntarily truncates
-    //     at ~2200 tokens even with maxOutputTokens=16384 — fall back to the
-    //     per-page render path which OCRs each page as a PNG.
-    //   - CLI agents: per-page render path (only accept images).
-    let text = match agent.spec.kind {
-        AgentKind::CloudApi if agent.spec.id == CLOUD_MISTRAL_ID => {
-            run_cloud_pdf_ocr(agent, &pdf_path).await?
-        }
-        _ => run_per_page_pdf_ocr(&app, agent, &pdf_path).await?,
-    };
+    let text = dispatch_pdf_ocr(&app, agent, &pdf_path).await?;
 
     let latency_ms = ocr_started.elapsed().as_millis() as i64;
     let cleaned = ocr::post_process(&text);
@@ -812,6 +799,33 @@ fn pick_agent<'a>(
         }
         installed.first().ok_or_else(|| "no agents available".into())
     }
+}
+
+/// Picks the right OCR path for a PDF based on agent type:
+///   - cloud-mistral: native /v1/ocr endpoint reliably handles multi-page.
+///   - cloud-gemini: PDF document modality truncates at ~2200 tokens —
+///     fall back to per-page render which OCRs each page as a PNG.
+///   - CLI agents: per-page render (they only accept images).
+async fn dispatch_pdf_ocr(
+    app: &AppHandle,
+    agent: &AgentInfo,
+    pdf_path: &str,
+) -> Result<String, String> {
+    use crate::agents::registry::AgentKind;
+    match agent.spec.kind {
+        AgentKind::CloudApi if agent.spec.id == CLOUD_MISTRAL_ID => {
+            run_cloud_pdf_ocr(agent, pdf_path).await
+        }
+        _ => run_per_page_pdf_ocr(app, agent, pdf_path).await,
+    }
+}
+
+fn is_pdf_path(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false)
 }
 
 async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, String> {
@@ -1081,7 +1095,25 @@ pub async fn rerun_snip(
         .map(|s| s.get().agent_priority)
         .unwrap_or_default();
     let started = Instant::now();
-    let (text, used_agent) = run_ocr_for_path(Some(agent_id), &image_path, &priority).await?;
+
+    // PDF records need the per-page pipeline. CLI agents can't read PDF
+    // bytes; cloud agents need agent-specific routing (mistral has a
+    // native endpoint, gemini needs per-page rendering).
+    let (text, used_agent) = if is_pdf_path(&image_path) {
+        let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
+            .await
+            .map_err(|e| format!("agent detect join: {e}"))?;
+        let agent = installed
+            .iter()
+            .find(|a| a.spec.id == agent_id)
+            .ok_or_else(|| format!("agent not installed: {agent_id}"))?;
+        let used = agent.spec.id.to_string();
+        let text = dispatch_pdf_ocr(&app, agent, &image_path).await?;
+        (text, used)
+    } else {
+        run_ocr_for_path(Some(agent_id), &image_path, &priority).await?
+    };
+
     let latency_ms = started.elapsed().as_millis() as i64;
     if used_agent == GEMINI_CLI_ID {
         ocr::validate_rerun_consistency(&record.output_text, &text)
