@@ -58,6 +58,10 @@ path = "src/bin/cli_test.rs"
 name = "history_smoke"
 path = "src/bin/history_smoke.rs"
 
+[[bin]]
+name = "pdf_smoke"
+path = "src/bin/pdf_smoke.rs"
+
 
 [[test]]
 name = "ocr_postprocess"
