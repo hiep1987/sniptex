@@ -33,6 +33,11 @@ use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
 
 const DISPATCH_TIMEOUT: Duration = Duration::from_secs(30);
+/// Per-page budget when a CLI agent processes a PDF page. CLI agents
+/// (codex, gemini-cli) are 5-10× slower than cloud APIs on a full
+/// page-sized image — empirically 60-90s on a 200dpi page — so the
+/// snip-tight 30s would always time out before the page completed.
+pub const PDF_CLI_PAGE_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Error)]
 pub enum DispatchError {
@@ -100,7 +105,21 @@ impl From<CloudMistralError> for DispatchError {
 
 pub async fn run_ocr(agent: &AgentInfo, image_path: &str) -> Result<String, DispatchError> {
     match agent.spec.kind {
-        AgentKind::CliBin => run_cli_agent(agent, image_path).await,
+        AgentKind::CliBin => run_cli_agent(agent, image_path, DISPATCH_TIMEOUT).await,
+        AgentKind::CloudApi => run_cloud_agent(agent, image_path).await,
+    }
+}
+
+/// PDF page variant of `run_ocr`. Uses `PDF_CLI_PAGE_TIMEOUT` for CLI
+/// agents to allow the longer per-image OCR latency they need on
+/// full PDF pages. Cloud agents are unaffected (their HTTP timeout is
+/// applied at the API adapter level).
+pub async fn run_ocr_pdf_page(
+    agent: &AgentInfo,
+    image_path: &str,
+) -> Result<String, DispatchError> {
+    match agent.spec.kind {
+        AgentKind::CliBin => run_cli_agent(agent, image_path, PDF_CLI_PAGE_TIMEOUT).await,
         AgentKind::CloudApi => run_cloud_agent(agent, image_path).await,
     }
 }
@@ -131,13 +150,13 @@ pub async fn run_pdf_cli(
     }
 
     let total = page_pngs.len();
-    let overall_budget = DISPATCH_TIMEOUT.saturating_mul(total as u32);
+    let overall_budget = PDF_CLI_PAGE_TIMEOUT.saturating_mul(total as u32);
 
     let work = async {
         let mut parts: Vec<String> = Vec::with_capacity(total);
         for (i, png) in page_pngs.iter().enumerate() {
             let path_str = png.to_string_lossy();
-            match run_cli_agent(agent, &path_str).await {
+            match run_cli_agent(agent, &path_str, PDF_CLI_PAGE_TIMEOUT).await {
                 Ok(text) => parts.push(text),
                 Err(e) => {
                     log::warn!("[pdf-cli] page {} failed: {e}", i + 1);
@@ -161,7 +180,11 @@ pub async fn run_pdf_cli(
     Ok(combined)
 }
 
-async fn run_cli_agent(agent: &AgentInfo, image_path: &str) -> Result<String, DispatchError> {
+async fn run_cli_agent(
+    agent: &AgentInfo,
+    image_path: &str,
+    cmd_timeout: Duration,
+) -> Result<String, DispatchError> {
     // RAII guard removes the temp file on every exit path — including
     // panic, future cancellation, and timeout — so we don't leak files
     // into the system temp dir.
@@ -204,10 +227,10 @@ async fn run_cli_agent(agent: &AgentInfo, image_path: &str) -> Result<String, Di
         cmd.current_dir(cwd.path());
     }
 
-    let output = match timeout(DISPATCH_TIMEOUT, cmd.output()).await {
+    let output = match timeout(cmd_timeout, cmd.output()).await {
         Ok(Ok(out)) => out,
         Ok(Err(e)) => return Err(DispatchError::Io(e.to_string())),
-        Err(_) => return Err(DispatchError::Timeout(DISPATCH_TIMEOUT.as_secs())),
+        Err(_) => return Err(DispatchError::Timeout(cmd_timeout.as_secs())),
     };
 
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
