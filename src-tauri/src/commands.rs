@@ -749,13 +749,17 @@ pub async fn run_pdf_ocr(
 
     let ocr_started = Instant::now();
 
+    // Routing:
+    //   - cloud-mistral: native OCR endpoint reliably handles multi-page PDFs.
+    //   - cloud-gemini: Gemini's PDF document modality voluntarily truncates
+    //     at ~2200 tokens even with maxOutputTokens=16384 — fall back to the
+    //     per-page render path which OCRs each page as a PNG.
+    //   - CLI agents: per-page render path (only accept images).
     let text = match agent.spec.kind {
-        AgentKind::CloudApi => {
+        AgentKind::CloudApi if agent.spec.id == CLOUD_MISTRAL_ID => {
             run_cloud_pdf_ocr(agent, &pdf_path).await?
         }
-        AgentKind::CliBin => {
-            run_cli_pdf_ocr(&app, agent, &pdf_path).await?
-        }
+        _ => run_per_page_pdf_ocr(&app, agent, &pdf_path).await?,
     };
 
     let latency_ms = ocr_started.elapsed().as_millis() as i64;
@@ -833,11 +837,16 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
     }
 }
 
-async fn run_cli_pdf_ocr(
+/// Per-page PDF OCR loop. Used by:
+///   - CLI agents (codex, gemini-cli) — they only accept images.
+///   - cloud-gemini — its PDF document modality truncates multi-page output.
+async fn run_per_page_pdf_ocr(
     app: &AppHandle,
     agent: &AgentInfo,
     pdf_path: &str,
 ) -> Result<String, String> {
+    use crate::agents::registry::AgentKind;
+
     let tmp_dir = std::env::temp_dir()
         .join("sniptex")
         .join(format!("pdf-pages-{}", Uuid::new_v4()));
@@ -853,7 +862,12 @@ async fn run_cli_pdf_ocr(
         return Err("PDF has no pages".into());
     }
 
-    let per_page = ocr::PDF_CLI_PAGE_TIMEOUT;
+    // CLI per-page: 120s (codex/gemini-cli are slow).
+    // Cloud per-page: 30s (HTTP timeout in the adapter is the real cap).
+    let per_page = match agent.spec.kind {
+        AgentKind::CliBin => ocr::PDF_CLI_PAGE_TIMEOUT,
+        AgentKind::CloudApi => Duration::from_secs(30),
+    };
     let overall_budget = per_page.saturating_mul(total as u32);
     let app_for_progress = app.clone();
     let pages: Vec<PathBuf> = page_pngs.clone();
