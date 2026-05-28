@@ -4891,6 +4891,8 @@ name = "sniptex"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "core-foundation",
+ "core-graphics",
  "dirs 5.0.1",
  "image",
  "keyring",
