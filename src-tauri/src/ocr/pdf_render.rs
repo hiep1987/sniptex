@@ -141,11 +141,14 @@ pub fn render_pages_to_pngs(
         ctx.scale(scale, scale);
 
         unsafe {
-            // CGContext implements ForeignType but the trait isn't re-exported;
-            // obtain the raw pointer via the Deref→CGContextRef→as_ptr chain.
+            // `sys::CGContextRef` IS `*mut sys::CGContext`. `&CGContextRef`
+            // is bit-equivalent to that raw pointer (foreign_types Opaque
+            // wrapper). Cast the reference address directly — do NOT
+            // dereference, or we'd read bytes from inside the C struct
+            // as if they were a pointer and PDF rendering silently no-ops.
             let ctx_ref: &core_graphics::context::CGContextRef = &ctx;
             let raw: core_graphics::sys::CGContextRef =
-                *(ctx_ref as *const _ as *const core_graphics::sys::CGContextRef);
+                ctx_ref as *const _ as *mut core_graphics::sys::CGContext;
             ffi::CGContextDrawPDFPage(raw, page);
         }
 
@@ -224,5 +227,67 @@ startxref
         let result =
             render_pages_to_pngs("/tmp/does-not-exist.pdf", Path::new("/tmp"), None);
         assert!(matches!(result, Err(PdfRenderError::Open(_))));
+    }
+
+    /// Regression: ensure `CGContextDrawPDFPage` actually rasterises content,
+    /// not just a white background. A PDF with a filled black rectangle MUST
+    /// produce a PNG that has at least one non-white pixel.
+    #[test]
+    fn render_pdf_with_content_produces_non_blank_png() {
+        let tmp = std::env::temp_dir().join("sniptex-pdf-content-test");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = std::fs::create_dir_all(&tmp);
+
+        // PDF v1.4 with a content stream that fills a 100x100 black rect
+        let pdf_bytes: &[u8] = b"%PDF-1.4\n\
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources << >> >> endobj\n\
+4 0 obj << /Length 26 >>\nstream\n\
+0 0 0 rg\n50 50 100 100 re\nf\n\
+endstream\nendobj\n\
+xref\n0 5\n\
+0000000000 65535 f \n\
+0000000009 00000 n \n\
+0000000056 00000 n \n\
+0000000111 00000 n \n\
+0000000208 00000 n \n\
+trailer << /Size 5 /Root 1 0 R >>\n\
+startxref\n290\n%%EOF\n";
+
+        let pdf_path = tmp.join("content.pdf");
+        std::fs::write(&pdf_path, pdf_bytes).unwrap();
+
+        let out_dir = tmp.join("pages");
+        std::fs::create_dir_all(&out_dir).unwrap();
+
+        let result = render_pages_to_pngs(pdf_path.to_str().unwrap(), &out_dir, Some(150.0));
+        let paths = match result {
+            Ok(p) => p,
+            Err(PdfRenderError::Open(_)) => {
+                // CoreGraphics couldn't parse our minimal PDF — skip
+                let _ = std::fs::remove_dir_all(&tmp);
+                return;
+            }
+            Err(e) => panic!("render failed: {e}"),
+        };
+        assert_eq!(paths.len(), 1);
+
+        let img = image::open(&paths[0]).expect("decode PNG");
+        let rgba = img.to_rgba8();
+        let total = rgba.pixels().count();
+        let non_white = rgba
+            .pixels()
+            .filter(|p| !(p[0] > 240 && p[1] > 240 && p[2] > 240))
+            .count();
+
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert!(
+            non_white > total / 100,
+            "PNG appears blank: only {non_white}/{total} non-white pixels — \
+             PDF rendering produced a white-only image, CGContextDrawPDFPage \
+             likely received a bad context pointer"
+        );
     }
 }
