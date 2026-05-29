@@ -861,6 +861,16 @@ async fn run_per_page_pdf_ocr(
 ) -> Result<String, String> {
     use crate::agents::registry::AgentKind;
 
+    let overall_started = Instant::now();
+    let agent_id = agent.spec.id;
+    log::info!(
+        "[pdf-ocr] start agent={agent_id} pdf={}",
+        Path::new(pdf_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(pdf_path)
+    );
+
     let tmp_dir = std::env::temp_dir()
         .join("sniptex")
         .join(format!("pdf-pages-{}", Uuid::new_v4()));
@@ -868,13 +878,16 @@ async fn run_per_page_pdf_ocr(
         .map_err(|e| format!("create temp dir: {e}"))?;
     let _cleanup = TempDirGuard(tmp_dir.clone());
 
+    let render_started = Instant::now();
     let page_pngs = ocr::pdf_render::render_pages_to_pngs(pdf_path, &tmp_dir, None)
         .map_err(|e| format!("PDF render: {e}"))?;
+    let render_ms = render_started.elapsed().as_millis();
 
     let total = page_pngs.len();
     if total == 0 {
         return Err("PDF has no pages".into());
     }
+    log::info!("[pdf-ocr] rendered {total} page(s) in {render_ms}ms");
 
     // CLI per-page: 120s (codex/gemini-cli are slow).
     // Cloud per-page: 30s (HTTP timeout in the adapter is the real cap).
@@ -893,9 +906,17 @@ async fn run_per_page_pdf_ocr(
             let _ = app_for_progress
                 .emit("pdf-progress", PdfProgress { page: i + 1, total });
             let path_str = png.to_string_lossy().to_string();
+            let page_started = Instant::now();
             let text = ocr::run_ocr_pdf_page(&agent_clone, &path_str)
                 .await
                 .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
+            let page_ms = page_started.elapsed().as_millis();
+            log::info!(
+                "[pdf-ocr] page {}/{} done in {page_ms}ms ({} chars)",
+                i + 1,
+                total,
+                text.len()
+            );
             parts.push(text);
         }
         Ok::<_, String>(parts)
@@ -903,16 +924,33 @@ async fn run_per_page_pdf_ocr(
 
     let parts = match tokio::time::timeout(overall_budget, work).await {
         Ok(Ok(p)) => p,
-        Ok(Err(e)) => return Err(e),
+        Ok(Err(e)) => {
+            log::warn!(
+                "[pdf-ocr] failed after {}ms: {e}",
+                overall_started.elapsed().as_millis()
+            );
+            return Err(e);
+        }
         Err(_) => {
+            log::warn!(
+                "[pdf-ocr] timed out after {}ms (budget {}s)",
+                overall_started.elapsed().as_millis(),
+                overall_budget.as_secs()
+            );
             return Err(format!(
                 "PDF OCR exceeded budget of {}s ({} pages × {}s)",
                 overall_budget.as_secs(),
                 total,
                 per_page.as_secs(),
-            ))
+            ));
         }
     };
+
+    let total_ms = overall_started.elapsed().as_millis();
+    log::info!(
+        "[pdf-ocr] done agent={agent_id} total={total_ms}ms (render={render_ms}ms, ocr={}ms)",
+        total_ms.saturating_sub(render_ms)
+    );
 
     Ok(parts.join("\n\n"))
 }
