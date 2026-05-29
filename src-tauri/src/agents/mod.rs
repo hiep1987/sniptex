@@ -2,15 +2,12 @@
 
 pub mod cloud_gemini_api;
 pub mod cloud_mistral_api;
-pub mod cloud_vision_api;
 pub mod codex;
 pub mod gemini_cli;
 pub mod keychain;
 pub mod registry;
 
-use registry::{
-    AgentInfo, AgentKind, AgentSpec, AGENTS, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CLOUD_VISION_ID,
-};
+use registry::{AgentInfo, AgentKind, AgentSpec, AGENTS, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -45,13 +42,6 @@ pub fn detect_installed_agents() -> Vec<AgentInfo> {
                     });
                 }
                 if spec.id == CLOUD_MISTRAL_ID && keychain::has_mistral_api_key() {
-                    results.push(AgentInfo {
-                        spec: spec.clone(),
-                        binary_path: PathBuf::from("<cloud-api>"),
-                        version: Some("v1".to_string()),
-                    });
-                }
-                if spec.id == CLOUD_VISION_ID && keychain::has_cloud_vision_api_key() {
                     results.push(AgentInfo {
                         spec: spec.clone(),
                         binary_path: PathBuf::from("<cloud-api>"),

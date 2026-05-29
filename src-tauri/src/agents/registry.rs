@@ -43,7 +43,6 @@ pub const CODEX_ID: &str = "codex";
 pub const GEMINI_CLI_ID: &str = "gemini-cli";
 pub const CLOUD_GEMINI_ID: &str = "cloud-gemini";
 pub const CLOUD_MISTRAL_ID: &str = "cloud-mistral";
-pub const CLOUD_VISION_ID: &str = "cloud-vision";
 
 pub const AGENTS: &[AgentSpec] = &[
     AgentSpec {
@@ -74,22 +73,9 @@ pub const AGENTS: &[AgentSpec] = &[
         supports_vision: true,
         kind: AgentKind::CloudApi,
     },
-    AgentSpec {
-        id: CLOUD_VISION_ID,
-        display_name: "Google Cloud Vision API (plain text)",
-        binary_names: &[],
-        supports_vision: true,
-        kind: AgentKind::CloudApi,
-    },
 ];
 
-pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[
-    CODEX_ID,
-    CLOUD_GEMINI_ID,
-    CLOUD_MISTRAL_ID,
-    CLOUD_VISION_ID,
-    GEMINI_CLI_ID,
-];
+pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[CODEX_ID, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID];
 
 pub fn spec_by_id(id: &str) -> Option<&'static AgentSpec> {
     AGENTS.iter().find(|a| a.id == id)
@@ -136,7 +122,7 @@ pub fn build_command_args(
                 "none".into(),
             ]
         }
-        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_VISION_ID => Vec::new(),
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID => Vec::new(),
         other => panic!("Unknown agent id: {other}"),
     }
 }

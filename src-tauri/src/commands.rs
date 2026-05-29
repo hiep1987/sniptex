@@ -112,7 +112,6 @@ pub fn set_api_key(provider: String, key: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::set_gemini_api_key(&key).map_err(|e| e.to_string()),
         "mistral" => keychain::set_mistral_api_key(&key).map_err(|e| e.to_string()),
-        "cloud-vision" => keychain::set_cloud_vision_api_key(&key).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -122,7 +121,6 @@ pub fn has_api_key(provider: String) -> Result<bool, String> {
     match provider.as_str() {
         "gemini" => Ok(keychain::has_gemini_api_key()),
         "mistral" => Ok(keychain::has_mistral_api_key()),
-        "cloud-vision" => Ok(keychain::has_cloud_vision_api_key()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -132,9 +130,6 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::delete(keychain::GEMINI_ACCOUNT).map_err(|e| e.to_string()),
         "mistral" => keychain::delete(keychain::MISTRAL_ACCOUNT).map_err(|e| e.to_string()),
-        "cloud-vision" => {
-            keychain::delete(keychain::CLOUD_VISION_ACCOUNT).map_err(|e| e.to_string())
-        }
         other => Err(format!("unsupported provider: {other}")),
     }
 }

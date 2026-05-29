@@ -14,19 +14,7 @@ const CLOUD_PROVIDERS: Record<string, { keyLabel: string; getKeyUrl: string }> =
     keyLabel: "Mistral Console",
     getKeyUrl: "https://console.mistral.ai/api-keys",
   },
-  "cloud-vision": {
-    keyLabel: "Google Cloud Console",
-    getKeyUrl: "https://console.cloud.google.com/apis/credentials",
-  },
 };
-
-/** Maps an agent id to the backend provider key used for keychain storage. */
-function providerKeyFor(id: string): string | null {
-  if (id === "cloud-gemini") return "gemini";
-  if (id === "cloud-mistral") return "mistral";
-  if (id === "cloud-vision") return "cloud-vision";
-  return null;
-}
 
 export default function AgentsTab() {
   const { agent_priority, patch } = useSettingsStore();
@@ -42,7 +30,7 @@ export default function AgentsTab() {
       const found = await tauri.detectAgents();
       setAgents(found);
       const ks: Record<string, boolean> = {};
-      for (const id of ["gemini", "mistral", "cloud-vision"]) {
+      for (const id of ["gemini", "mistral"]) {
         ks[id] = await tauri.hasApiKey(id);
       }
       setKeyStates(ks);
@@ -55,7 +43,7 @@ export default function AgentsTab() {
 
   useEffect(() => { scan(); }, [scan]);
 
-  const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-vision", "gemini-cli"];
+  const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "gemini-cli"];
   const allIds = [
     ...agent_priority.filter((id) => ALL_KNOWN.includes(id)),
     ...ALL_KNOWN.filter((id) => !agent_priority.includes(id)),
@@ -77,8 +65,7 @@ export default function AgentsTab() {
 
   const saveKey = async (provider: string) => {
     if (!keyDraft.trim()) return;
-    const providerKey = providerKeyFor(provider);
-    if (!providerKey) return;
+    const providerKey = provider === "cloud-gemini" ? "gemini" : "mistral";
     await tauri.setApiKey(providerKey, keyDraft.trim());
     setKeyStates((s) => ({ ...s, [providerKey]: true }));
     setEditingKey(null);
@@ -87,8 +74,7 @@ export default function AgentsTab() {
   };
 
   const deleteKey = async (provider: string) => {
-    const providerKey = providerKeyFor(provider);
-    if (!providerKey) return;
+    const providerKey = provider === "cloud-gemini" ? "gemini" : "mistral";
     await tauri.deleteApiKey(providerKey);
     setKeyStates((s) => ({ ...s, [providerKey]: false }));
     scan();
@@ -117,7 +103,7 @@ export default function AgentsTab() {
         {allIds.map((id, idx) => {
           const info = agents.find((a) => a.spec.id === id);
           const isCloud = id.startsWith("cloud-");
-          const providerKey = providerKeyFor(id);
+          const providerKey = id === "cloud-gemini" ? "gemini" : id === "cloud-mistral" ? "mistral" : null;
           const hasKey = providerKey ? keyStates[providerKey] ?? false : false;
           const installed = !!info;
           const cloud = CLOUD_PROVIDERS[id];
