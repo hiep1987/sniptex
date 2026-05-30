@@ -859,16 +859,20 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
     }
 }
 
-/// Per-agent cap on concurrent in-flight page OCR calls. Conservative for
-/// agents that share a single process or a paid token bucket; generous for
-/// cloud agents with native concurrency headroom.
+/// Per-agent cap on concurrent in-flight page OCR calls. Cloud APIs handle
+/// parallel requests server-side and benefit from concurrency; local CLI
+/// subprocesses contend for CPU and shared upstream rate limits, where
+/// concurrency=2 measurably regressed page 2 latency (codex: 39s sequential
+/// → 78s parallel) and triggered 120s timeouts in gemini-cli. Keep local
+/// CLIs at 1 (effectively sequential) and let cloud agents fan out.
 fn pdf_page_concurrency(agent_id: &str) -> usize {
     use crate::agents::registry::{
         CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID, CODEX_ID, GEMINI_CLI_ID,
     };
     match agent_id {
-        // Local CLI subprocess — keep low to avoid CPU thrash on laptops.
-        CODEX_ID | GEMINI_CLI_ID => 2,
+        // Local CLI subprocess — concurrency hurts on local CPU + the upstream
+        // ChatGPT/Gemini accounts they share. Keep sequential.
+        CODEX_ID | GEMINI_CLI_ID => 1,
         // gpt-5.4 over Goclaw — single ChatGPT-Plus account, don't hammer.
         CLOUD_GOCLAW_ID => 2,
         // Cloud vision APIs with proper rate limits.
