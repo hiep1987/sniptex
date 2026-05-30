@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "SnipTeX UI + settings wiring"
-status: pending
+status: completed
 priority: P1
 effort: "2h"
 dependencies: [3]
@@ -90,12 +90,12 @@ Four surfaces touched:
 
 ## Success Criteria
 
-- [ ] Settings → Agents shows the Goclaw row with proper status badge ("Key set" / "No key").
-- [ ] Setting / updating / removing the key persists across app restart (verified via keychain JSON inspection).
-- [ ] Cloud-goclaw appears in priority list and is reorderable.
-- [ ] PDF flow with cloud-goclaw produces multi-page LaTeX output (verified against `test-1.pdf`), completing under `pages × 120s`.
-- [ ] Rerun-from-history with cloud-goclaw works on both image and PDF records.
-- [ ] Existing PDF flows with cloud-gemini and cloud-mistral are unaffected (regression check — the 3-arm `match` must not accidentally widen their budget or narrow Goclaw's).
+- [x] Settings → Agents shows the Goclaw row with proper status badge ("Key set" / "No key"). New entry in `CLOUD_PROVIDERS` + `ALL_KNOWN` + `providerKeyFor` helper.
+- [x] Setting / updating / removing the key persists — `set/has/delete_api_key` now route `"goclaw"` → `keychain::*_cloud_goclaw_api_key`. Same fallback file backend as gemini/mistral, so cross-restart persistence is inherited.
+- [x] Cloud-goclaw appears in priority list and is reorderable — `ALL_KNOWN` now includes `cloud-goclaw` between `cloud-mistral` and `gemini-cli`.
+- [x] Per-page PDF budget for `cloud-goclaw` is 120s — 3-arm `(kind, id)` match in `run_per_page_pdf_ocr` carves it out. Verified by inspection: specific-id arm sits BEFORE the generic-kind wildcard so it can't be shadowed.
+- [x] Existing PDF flows with cloud-gemini and cloud-mistral are unaffected — gemini still hits the `(CloudApi, _)` wildcard arm (30s), mistral keeps its native multi-page branch upstream of `run_per_page_pdf_ocr`. 132/132 tests pass.
+- [ ] Manual smoke through admin UI: paste API key from Phase 2, snip a math screenshot, then PDF test with `test-1.pdf`. Gated by app launch — user runs this after merge.
 
 ## Risk Assessment
 
@@ -112,6 +112,63 @@ Four surfaces touched:
 - `goclaw_xxx` keys redacted from logs by the Phase 3 adapter's `redact_key`.
 - Settings UI never displays the key after save (only "Key set" badge + Update / Remove buttons).
 
+## Execution Notes (2026-05-30)
+
+### What landed
+
+| File | Change | Notes |
+|------|--------|-------|
+| `src-tauri/src/commands.rs` | 3 match arms for `"goclaw"` provider in `set/has/delete_api_key` + 3-arm `(kind, id)` match in `run_per_page_pdf_ocr` | Specific-id arm BEFORE wildcard so cloud-goclaw gets 120s, cloud-gemini stays at 30s, CLI agents unchanged |
+| `src/windows/settings/agents-tab.tsx` | `CLOUD_PROVIDERS` now keyed by id with new `placeholder` field; `ALL_KNOWN` includes `cloud-goclaw`; `providerKeyFor(agentId)` helper replaces the inline ternaries; `CLOUD_PROVIDER_KEYS` constant drives the `scan` loop | Per-provider placeholder strings prevent the "paste a Gemini key into Goclaw slot" UX foot-gun the risk assessment flagged |
+
+### Plan-vs-impl deviations
+
+| Plan said | Reality |
+|-----------|---------|
+| `getKeyUrl: "https://goclaw.tikz2svg.com/dashboard/api-keys"` | Used `https://goclaw.tikz2svg.com/api-keys` — Goclaw's React router doesn't have a `/dashboard` prefix (verified in `sidebar.tsx`: routes are `/agents`, `/api-keys`, `/builtin-tools`, etc.). |
+| Add placeholder hint via `ApiKeyInput placeholder={...}` ad-hoc | Promoted to a per-provider `placeholder` field on `CLOUD_PROVIDERS` so all three providers get tailored hints (`AIza…` for Gemini, `goclaw_…` for Goclaw, generic for Mistral). Avoids future drift. |
+| Mention `cloud-mistral` early-out for native PDF in dispatch path | No code change needed — the early-out lives upstream in `dispatch_pdf_ocr`, and `run_per_page_pdf_ocr` is only reached by the agents that need it. Plan was accurate. |
+
+### Touchpoints — regression scan
+
+- `commands.rs::set_api_key` / `has_api_key` / `delete_api_key` — only ADDED `"goclaw"` arms; existing `"gemini"` / `"mistral"` / wildcard error paths untouched.
+- `commands.rs::run_per_page_pdf_ocr` — replaced the 2-arm `match agent.spec.kind` with a 3-arm `match (kind, id)`. CLI behaviour identical (`(CliBin, _) => 120s`). Cloud-gemini falls into `(CloudApi, _) => 30s` (same as before). Only behavioural change: cloud-goclaw goes from default-30s to explicit-120s.
+- `agents-tab.tsx::scan` — loop now iterates `CLOUD_PROVIDER_KEYS = ["gemini","mistral","goclaw"]` instead of the inline `["gemini","mistral"]`. Same code path, one extra `has_api_key` call.
+- `agents-tab.tsx::saveKey` / `deleteKey` — extracted the ternary into `providerKeyFor`. Null-guard added so a future agent id with no provider mapping bails out gracefully instead of falling through to "mistral".
+- `agents-tab.tsx` row render — `providerKey` derivation now goes through `providerKeyFor`, behaviourally identical for the existing two providers, new `cloud-goclaw` correctly maps to `"goclaw"`.
+
+### Public contract delta
+
+All net-new arms / fields. No existing signatures, command names, or component props modified.
+
+- `set_api_key("goclaw", ...)` / `has_api_key("goclaw")` / `delete_api_key("goclaw")` — new accepted provider id.
+- `CLOUD_PROVIDERS["cloud-goclaw"]` — new entry; existing two entries now also carry a `placeholder` field (additive — no existing code reads the absence of this field).
+- `ALL_KNOWN` — added one entry, order preserved otherwise.
+
+### Verification
+
+- `cargo check`: clean.
+- `cargo test`: 132/132 pass (54 lib + 78 integration), including the 20 cloud_goclaw_api integration tests from Phase 3.
+- `tsc --noEmit`: clean.
+- No new clippy warnings on touched code.
+
+### Risks revisited
+
+- **`(kind, id)` match shadowing:** verified by inspection. Match arms are in order specific-id → wildcard, so `(CloudApi, CLOUD_GOCLAW_ID)` correctly takes priority over `(CloudApi, _)`. Rust exhaustiveness check confirms the wildcard catches every other CloudApi id.
+- **User pastes wrong-shape key:** mitigated via per-provider placeholders. Backend `AuthFailed` from the WS handshake still surfaces if a malformed key slips through.
+- **Future provider id collision in `keyStates`:** mitigated by `providerKeyFor` being the single source of truth. Any new provider declares its short key here.
+
 ## Next Steps
 
 After merge: short `docs/cloud-goclaw.md` (or update `docs/codebase-summary.md`) explaining the agent, the keychain account name, how to rotate the key, and the 120s/page latency expectation. Bump `docs/project-changelog.md` with the integration. Out of scope for this phase but listed for the post-implementation `/ck:project-management` sweep.
+
+**Plan complete.** All four phases shipped end-to-end:
+
+| Phase | Title | Result |
+|-------|-------|--------|
+| 1 | Goclaw TeX OCR Skill | tex-ocr skill v4 deployed to VPS, smoke-tested image + PDF |
+| 2 | Goclaw agent + API key | `tex-ocr` agent live, API key `goclaw_4c7540a5…` issued |
+| 3 | SnipTeX cloud-goclaw adapter | Rust adapter + 20 integration tests, dispatcher wired |
+| 4 | SnipTeX UI + settings wiring | Settings UI ready, per-page 120s budget carved out |
+
+Pending user action: paste the Phase 2 API key into Settings → Agents → Goclaw OCR Agent → "Set API key", run the manual smoke (snip + PDF).

@@ -5,16 +5,46 @@ import { useSettingsStore } from "@/stores/settings-store";
 import ApiKeyInput from "@/components/api-key-input";
 import { cn } from "@/lib/cn";
 
-const CLOUD_PROVIDERS: Record<string, { keyLabel: string; getKeyUrl: string }> = {
+const CLOUD_PROVIDERS: Record<
+  string,
+  { keyLabel: string; getKeyUrl: string; placeholder: string }
+> = {
   "cloud-gemini": {
     keyLabel: "Google AI Studio",
     getKeyUrl: "https://aistudio.google.com/apikey",
+    placeholder: "Paste Google AI Studio API key (AIza…)",
   },
   "cloud-mistral": {
     keyLabel: "Mistral Console",
     getKeyUrl: "https://console.mistral.ai/api-keys",
+    placeholder: "Paste Mistral Console API key",
+  },
+  "cloud-goclaw": {
+    keyLabel: "Goclaw API Keys",
+    getKeyUrl: "https://goclaw.tikz2svg.com/api-keys",
+    placeholder: "Paste Goclaw API key (goclaw_…)",
   },
 };
+
+const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-goclaw", "gemini-cli"];
+
+/// Map an agent id (e.g. "cloud-gemini") to the short provider key the
+/// backend `set_api_key` / `has_api_key` / `delete_api_key` commands accept
+/// (e.g. "gemini"). Returns null for non-cloud agents.
+function providerKeyFor(agentId: string): string | null {
+  switch (agentId) {
+    case "cloud-gemini":
+      return "gemini";
+    case "cloud-mistral":
+      return "mistral";
+    case "cloud-goclaw":
+      return "goclaw";
+    default:
+      return null;
+  }
+}
+
+const CLOUD_PROVIDER_KEYS = ["gemini", "mistral", "goclaw"] as const;
 
 export default function AgentsTab() {
   const { agent_priority, patch } = useSettingsStore();
@@ -30,7 +60,7 @@ export default function AgentsTab() {
       const found = await tauri.detectAgents();
       setAgents(found);
       const ks: Record<string, boolean> = {};
-      for (const id of ["gemini", "mistral"]) {
+      for (const id of CLOUD_PROVIDER_KEYS) {
         ks[id] = await tauri.hasApiKey(id);
       }
       setKeyStates(ks);
@@ -43,7 +73,6 @@ export default function AgentsTab() {
 
   useEffect(() => { scan(); }, [scan]);
 
-  const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "gemini-cli"];
   const allIds = [
     ...agent_priority.filter((id) => ALL_KNOWN.includes(id)),
     ...ALL_KNOWN.filter((id) => !agent_priority.includes(id)),
@@ -65,7 +94,8 @@ export default function AgentsTab() {
 
   const saveKey = async (provider: string) => {
     if (!keyDraft.trim()) return;
-    const providerKey = provider === "cloud-gemini" ? "gemini" : "mistral";
+    const providerKey = providerKeyFor(provider);
+    if (!providerKey) return;
     await tauri.setApiKey(providerKey, keyDraft.trim());
     setKeyStates((s) => ({ ...s, [providerKey]: true }));
     setEditingKey(null);
@@ -74,7 +104,8 @@ export default function AgentsTab() {
   };
 
   const deleteKey = async (provider: string) => {
-    const providerKey = provider === "cloud-gemini" ? "gemini" : "mistral";
+    const providerKey = providerKeyFor(provider);
+    if (!providerKey) return;
     await tauri.deleteApiKey(providerKey);
     setKeyStates((s) => ({ ...s, [providerKey]: false }));
     scan();
@@ -103,7 +134,7 @@ export default function AgentsTab() {
         {allIds.map((id, idx) => {
           const info = agents.find((a) => a.spec.id === id);
           const isCloud = id.startsWith("cloud-");
-          const providerKey = id === "cloud-gemini" ? "gemini" : id === "cloud-mistral" ? "mistral" : null;
+          const providerKey = providerKeyFor(id);
           const hasKey = providerKey ? keyStates[providerKey] ?? false : false;
           const installed = !!info;
           const cloud = CLOUD_PROVIDERS[id];
@@ -174,7 +205,7 @@ export default function AgentsTab() {
                       <ApiKeyInput
                         value={keyDraft}
                         onChange={setKeyDraft}
-                        placeholder={`Paste ${cloud.keyLabel} API key`}
+                        placeholder={cloud.placeholder}
                       />
                       <div className="flex gap-2">
                         <button

@@ -112,6 +112,7 @@ pub fn set_api_key(provider: String, key: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::set_gemini_api_key(&key).map_err(|e| e.to_string()),
         "mistral" => keychain::set_mistral_api_key(&key).map_err(|e| e.to_string()),
+        "goclaw" => keychain::set_cloud_goclaw_api_key(&key).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -121,6 +122,7 @@ pub fn has_api_key(provider: String) -> Result<bool, String> {
     match provider.as_str() {
         "gemini" => Ok(keychain::has_gemini_api_key()),
         "mistral" => Ok(keychain::has_mistral_api_key()),
+        "goclaw" => Ok(keychain::has_cloud_goclaw_api_key()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -130,6 +132,9 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::delete(keychain::GEMINI_ACCOUNT).map_err(|e| e.to_string()),
         "mistral" => keychain::delete(keychain::MISTRAL_ACCOUNT).map_err(|e| e.to_string()),
+        "goclaw" => {
+            keychain::delete(keychain::CLOUD_GOCLAW_ACCOUNT).map_err(|e| e.to_string())
+        }
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -890,10 +895,14 @@ async fn run_per_page_pdf_ocr(
     log::info!("[pdf-ocr] rendered {total} page(s) in {render_ms}ms");
 
     // CLI per-page: 120s (codex/gemini-cli are slow).
-    // Cloud per-page: 30s (HTTP timeout in the adapter is the real cap).
-    let per_page = match agent.spec.kind {
-        AgentKind::CliBin => ocr::PDF_CLI_PAGE_TIMEOUT,
-        AgentKind::CloudApi => Duration::from_secs(30),
+    // cloud-goclaw also gets 120s — it runs gpt-5.4 server-side, same model
+    // family / latency profile as the local codex CLI. The other cloud agents
+    // (gemini, mistral) are sub-30s per page and keep the tighter budget.
+    use crate::agents::registry::CLOUD_GOCLAW_ID;
+    let per_page = match (agent.spec.kind, agent.spec.id) {
+        (AgentKind::CliBin, _) => ocr::PDF_CLI_PAGE_TIMEOUT,
+        (AgentKind::CloudApi, CLOUD_GOCLAW_ID) => ocr::PDF_CLI_PAGE_TIMEOUT,
+        (AgentKind::CloudApi, _) => Duration::from_secs(30),
     };
     let overall_budget = per_page.saturating_mul(total as u32);
     let app_for_progress = app.clone();

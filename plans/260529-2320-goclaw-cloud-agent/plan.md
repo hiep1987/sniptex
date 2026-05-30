@@ -27,7 +27,7 @@ Value vs existing cloud agents: a single endpoint the user already operates, fre
 | 1 | [Goclaw TeX OCR Skill](./phase-01-goclaw-tex-ocr-skill.md) | Completed |
 | 2 | [Goclaw agent + API key](./phase-02-goclaw-agent-api-key.md) | Completed |
 | 3 | [SnipTeX cloud-goclaw adapter](./phase-03-sniptex-cloud-goclaw-adapter.md) | Completed |
-| 4 | [SnipTeX UI + settings wiring](./phase-04-sniptex-ui-settings-wiring.md) | Pending |
+| 4 | [SnipTeX UI + settings wiring](./phase-04-sniptex-ui-settings-wiring.md) | Completed |
 
 ## Architecture
 
