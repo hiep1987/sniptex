@@ -5,6 +5,12 @@
 //! mirrored to the bash test harness so prompt validation results stay
 //! comparable across CLI sweeps.
 //!
+//! Also mirrored in the Goclaw cloud agent's skill file:
+//! `bot-tex/skills-store/tex-ocr/1/SKILL.md` (deployed to VPS volume
+//! `/var/lib/docker/volumes/goclaw_goclaw-data/_data/skills-store/tex-ocr/1/SKILL.md`).
+//! Edits to classification, format branches, or strict rules below must be
+//! propagated to that SKILL.md (body) and its frontmatter `description`.
+//!
 //! Gemini CLI headless is deliberately excluded from this prompt. Live
 //! validation showed this procedural contract (classification, format
 //! branches, examples, strict rules) can push `gemini -p` into agentic
