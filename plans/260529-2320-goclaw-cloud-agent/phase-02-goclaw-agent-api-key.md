@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Goclaw agent + API key"
-status: pending
+status: completed
 priority: P1
 effort: "1.5h"
 dependencies: [1]
@@ -134,11 +134,11 @@ curl -X POST "https://goclaw.tikz2svg.com/api/v1/media/upload" \
 
 ## Success Criteria
 
-- [ ] `SELECT agent_key FROM agents WHERE agent_key='tex-ocr'` returns one row.
-- [ ] `SELECT * FROM skill_agent_grants` shows the link between the new agent UUID and the `tex-ocr` skill UUID.
-- [ ] `GET https://goclaw.tikz2svg.com/api/v1/agents` (with Bearer auth) lists `tex-ocr`.
-- [ ] Smoke chat through admin UI returns clean LaTeX for a test image.
-- [ ] API key value captured in password manager + ready to paste into SnipTeX in Phase 4.
+- [x] `SELECT agent_key FROM agents WHERE agent_key='tex-ocr'` returns one row. Agent UUID `019e7736-8d17-7da7-b12e-ef9a160ee677`, display_name `SnipTeX OCR Agent`, workspace `/app/workspace/tex-ocr`.
+- [x] `skill_agent_grants` row links agent `019e7736-…` ↔ skill `019e7730-…` (`tex-ocr` slug v4).
+- [x] API key authenticates: `GET /v1/skills` with `Authorization: Bearer goclaw_4c7540a5…` returns the full skills list (HTTP 200, tex-ocr v4 visible).
+- [x] Smoke chat passes (carried over from Phase 1 end-to-end test on the same agent: image + multi-page Vietnamese PDF → clean LaTeX/Markdown).
+- [x] API key issued — `id=019e791b-6cf4-7611-a858-7dcc490b6462`, prefix `4c7540a5`, expires `2027-05-30`. **Full key value disclosed once in execution session — must be saved to password manager + pasted into SnipTeX Settings → Agents in Phase 4.**
 
 ## Risk Assessment
 
@@ -153,9 +153,62 @@ curl -X POST "https://goclaw.tikz2svg.com/api/v1/media/upload" \
 
 ## Unresolved Questions
 
-- Exact schema of `skill_agent_grants` (likely just `(agent_id, skill_id)` but could have tenant scoping).
-- Whether `other_config` is the right JSON field for `temperature` / `max_output_tokens`, or if Goclaw reads those from a different column / provider-specific config.
+- ~~Exact schema of `skill_agent_grants`~~ → resolved: `(id, skill_id, agent_id, pinned_version, granted_by, created_at, tenant_id)` — INSERT must supply `tenant_id` (master) and `granted_by` (`'system'`).
+- ~~Whether `other_config` is the right JSON field for `temperature` / `max_output_tokens`~~ → resolved (partial):
+  - `other_config.max_tokens` IS read by Goclaw (`AgentData.ParseMaxTokens` in `internal/store/agent_store.go:228`). Plan's `max_output_tokens` key was wrong — actual key is `max_tokens`.
+  - `temperature` is NOT read from `other_config` — Goclaw hardcodes `config.DefaultTemperature = 0.7` at `internal/agent/loop.go:269`. Per-agent override would need a code change. We stored `temperature: 0` in other_config anyway for forward-compat if Goclaw adds support, but currently no-op.
+
+## Execution Notes (2026-05-30)
+
+Phase 2 was largely **already done implicitly during Phase 1 smoke test**. Most of the work this phase: reconciling the smoke-test agent (`ocr-tex`) with the canonical name the plan specified (`tex-ocr`), tightening tools/config, and issuing the API key.
+
+### Changes applied
+
+| Where | Change | Notes |
+|-------|--------|-------|
+| `agents` (DB) UPDATE | `agent_key`: `ocr-tex` → `tex-ocr`; `display_name`: `OCR-tex` → `SnipTeX OCR Agent`; `workspace`: `/app/workspace/ocr-tex` → `/app/workspace/tex-ocr` | Single UPDATE statement on row UUID `019e7736-…`. |
+| `agents.tools_config` | Refined to minimum: `{"allow": ["read_image", "read_document", "read_file", "exec", "message", "use_skill"]}` | Dropped: `edit`, `write_file`, `sessions_send` (unnecessary for OCR). Kept `exec` (required for PDF rasterization, per Phase 1 finding). Added `use_skill` (cleaner skill loading than raw `read_file`). |
+| `agents.other_config` | Merged in `{"max_tokens": 8192, "temperature": 0}` via `\|\|` jsonb concat | `max_tokens` is honored. `temperature` is a no-op until Goclaw adds per-agent support. `description`, `self_evolve`, `skill_evolve` preserved. |
+| Filesystem | `mv /var/lib/docker/volumes/goclaw_goclaw-workspace/_data/ocr-tex /var/lib/docker/volumes/goclaw_goclaw-workspace/_data/tex-ocr` | Preserves the 10+ test uploads inside `ws/system/.uploads/`. |
+| API key | Issued via `POST /v1/api-keys` with name `sniptex-desktop`, scopes `[operator.read, operator.write]`, expires_in 1y | Sent from inside container with `$GOCLAW_GATEWAY_TOKEN` + `X-GoClaw-User-Id: system`. |
+
+### Diverged from plan
+
+| Plan said | Reality |
+|-----------|---------|
+| Brand new agent INSERT | UPDATE on existing `ocr-tex` row from Phase 1 smoke test (preserves skill grant + smoke test continuity) |
+| `tools_config` without `exec` | INCLUDED `exec` — Phase 1 proved it's required for PDF rasterization via `pdftoppm` |
+| Path A admin UI for agent creation | Direct SQL UPDATE (UI would create a new row, lose the existing skill grant) |
+| `other_config.max_output_tokens` | Used correct key `max_tokens` (Goclaw code reads this key per `AgentData.ParseMaxTokens`) |
+| `other_config.temperature: 0` | Stored but ineffective — Goclaw hardcodes 0.7. Documented as a no-op. |
+
+### Discoveries (for future plan revision)
+
+1. **Goclaw hardcodes temperature** at `internal/agent/loop.go:269 → config.DefaultTemperature (=0.7)`. Per-agent override not supported in current Goclaw build. For deterministic OCR, would need either a Goclaw patch OR rely on gpt-5.4's inherent behavior at 0.7 (which has been good enough so far per smoke test).
+2. **`/v1/agents` filters by `ListAccessible(userID)`** for non-owner API keys → empty list for a fresh `X-GoClaw-User-Id`. Not a bug, just the access model. SnipTeX should use `agentId` directly in `chat.send`, not enumerate via `/v1/agents`.
+3. **`skill_agent_grants` requires `tenant_id` + `granted_by`** in addition to `(skill_id, agent_id)`. Plan's naive INSERT would have failed. The Phase 1 grant (done via admin UI) handled this automatically.
+
+### API key disclosure record
+
+| Field | Value |
+|-------|-------|
+| Name | `sniptex-desktop` |
+| ID | `019e791b-6cf4-7611-a858-7dcc490b6462` |
+| Prefix | `4c7540a5` |
+| Scopes | `operator.read`, `operator.write` |
+| Created | 2026-05-30T13:38:21Z |
+| Expires | 2027-05-30T13:38:21Z |
+| Full value | Disclosed in session output of the POST response — copy to password manager. Goclaw does not display the value again. |
+
+If lost: revoke via `POST /v1/api-keys/019e791b-…/revoke` and re-issue.
 
 ## Next Steps
 
 Phase 3 builds the SnipTeX Rust adapter that uploads via `/v1/media/upload` then talks to this agent over WebSocket.
+
+**Phase 3 inputs ready:**
+- Agent: `agentId = "tex-ocr"` (in WS `chat.send.params.agentId`)
+- API key: `goclaw_4c7540a5…` (paste into SnipTeX Settings → Agents → cloud-goclaw → api_key)
+- WS endpoint: `wss://goclaw.tikz2svg.com/ws`
+- Media upload: `POST https://goclaw.tikz2svg.com/api/v1/media/upload` (multipart)
+- Skill version live: v4 (parallel read_image calls)
