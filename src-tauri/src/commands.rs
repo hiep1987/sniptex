@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use futures_util::future::try_join_all;
+use tokio::sync::Semaphore;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -856,9 +859,34 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
     }
 }
 
+/// Per-agent cap on concurrent in-flight page OCR calls. Conservative for
+/// agents that share a single process or a paid token bucket; generous for
+/// cloud agents with native concurrency headroom.
+fn pdf_page_concurrency(agent_id: &str) -> usize {
+    use crate::agents::registry::{
+        CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID, CODEX_ID, GEMINI_CLI_ID,
+    };
+    match agent_id {
+        // Local CLI subprocess — keep low to avoid CPU thrash on laptops.
+        CODEX_ID | GEMINI_CLI_ID => 2,
+        // gpt-5.4 over Goclaw — single ChatGPT-Plus account, don't hammer.
+        CLOUD_GOCLAW_ID => 2,
+        // Cloud vision APIs with proper rate limits.
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID => 5,
+        // Unknown agents: default to a safe middle.
+        _ => 3,
+    }
+}
+
 /// Per-page PDF OCR loop. Used by:
 ///   - CLI agents (codex, gemini-cli) — they only accept images.
 ///   - cloud-gemini — its PDF document modality truncates multi-page output.
+///   - cloud-goclaw — single-image chat.send per page.
+///
+/// Pages are dispatched in parallel with a per-agent concurrency cap
+/// (`pdf_page_concurrency`) so multi-page PDFs no longer scale linearly
+/// with N. Results are re-sorted by page index before concatenation so
+/// the output order is stable regardless of completion order.
 async fn run_per_page_pdf_ocr(
     app: &AppHandle,
     agent: &AgentInfo,
@@ -904,34 +932,59 @@ async fn run_per_page_pdf_ocr(
         (AgentKind::CloudApi, CLOUD_GOCLAW_ID) => ocr::PDF_CLI_PAGE_TIMEOUT,
         (AgentKind::CloudApi, _) => Duration::from_secs(30),
     };
+    // Overall budget = per_page × total. With parallelism, real wall-clock will
+    // typically be much less, but keep the upper bound matching the worst-case
+    // sequential equivalent so we don't accidentally tighten it.
     let overall_budget = per_page.saturating_mul(total as u32);
+
+    let max_concurrent = pdf_page_concurrency(agent_id).max(1);
+    log::info!(
+        "[pdf-ocr] dispatching {total} page(s) with concurrency={max_concurrent}"
+    );
+
+    let sem = Arc::new(Semaphore::new(max_concurrent));
+    let done_counter = Arc::new(AtomicUsize::new(0));
     let app_for_progress = app.clone();
-    let pages: Vec<PathBuf> = page_pngs.clone();
     let agent_clone = agent.clone();
 
     let work = async move {
-        let mut parts: Vec<String> = Vec::with_capacity(total);
-        for (i, png) in pages.iter().enumerate() {
-            let _ = app_for_progress
-                .emit("pdf-progress", PdfProgress { page: i + 1, total });
-            let path_str = png.to_string_lossy().to_string();
-            let page_started = Instant::now();
-            let text = ocr::run_ocr_pdf_page(&agent_clone, &path_str)
-                .await
-                .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
-            let page_ms = page_started.elapsed().as_millis();
-            log::info!(
-                "[pdf-ocr] page {}/{} done in {page_ms}ms ({} chars)",
-                i + 1,
-                total,
-                text.len()
-            );
-            parts.push(text);
-        }
-        Ok::<_, String>(parts)
+        let tasks = page_pngs.into_iter().enumerate().map(|(i, png)| {
+            let sem = sem.clone();
+            let agent = agent_clone.clone();
+            let app = app_for_progress.clone();
+            let done = done_counter.clone();
+            async move {
+                let _permit = sem
+                    .acquire()
+                    .await
+                    .map_err(|e| format!("page {} concurrency permit: {e}", i + 1))?;
+                let path_str = png.to_string_lossy().to_string();
+                let page_started = Instant::now();
+                let text = ocr::run_ocr_pdf_page(&agent, &path_str)
+                    .await
+                    .map_err(|e| format!("page {} OCR failed: {e}", i + 1))?;
+                let page_ms = page_started.elapsed().as_millis();
+                let completed = done.fetch_add(1, Ordering::SeqCst) + 1;
+                let _ = app.emit(
+                    "pdf-progress",
+                    PdfProgress {
+                        page: completed,
+                        total,
+                    },
+                );
+                log::info!(
+                    "[pdf-ocr] page {}/{} done in {page_ms}ms ({} chars)",
+                    i + 1,
+                    total,
+                    text.len()
+                );
+                Ok::<(usize, String), String>((i, text))
+            }
+        });
+        try_join_all(tasks).await
     };
 
-    let parts = match tokio::time::timeout(overall_budget, work).await {
+    let mut indexed = match tokio::time::timeout(overall_budget, work).await {
         Ok(Ok(p)) => p,
         Ok(Err(e)) => {
             log::warn!(
@@ -955,9 +1008,15 @@ async fn run_per_page_pdf_ocr(
         }
     };
 
+    // Pages may complete out of order under parallelism — sort by original
+    // page index before concatenating so the final document preserves source
+    // order.
+    indexed.sort_by_key(|(i, _)| *i);
+    let parts: Vec<String> = indexed.into_iter().map(|(_, t)| t).collect();
+
     let total_ms = overall_started.elapsed().as_millis();
     log::info!(
-        "[pdf-ocr] done agent={agent_id} total={total_ms}ms (render={render_ms}ms, ocr={}ms)",
+        "[pdf-ocr] done agent={agent_id} total={total_ms}ms (render={render_ms}ms, ocr={}ms, concurrency={max_concurrent})",
         total_ms.saturating_sub(render_ms)
     );
 
