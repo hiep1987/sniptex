@@ -171,4 +171,6 @@ After merge: short `docs/cloud-goclaw.md` (or update `docs/codebase-summary.md`)
 | 3 | SnipTeX cloud-goclaw adapter | Rust adapter + 20 integration tests, dispatcher wired |
 | 4 | SnipTeX UI + settings wiring | Settings UI ready, per-page 120s budget carved out |
 
-Pending user action: paste the Phase 2 API key into Settings → Agents → Goclaw OCR Agent → "Set API key", run the manual smoke (snip + PDF).
+### Post-merge follow-up (2026-05-31)
+
+Manual smoke uncovered cloud-goclaw at ~115s for a 2-page PDF — acceptable but slow. A post-ship perf pass parallelized `run_per_page_pdf_ocr` (commits `601701c` + `e962216`), bringing cloud agents down 35-42% while leaving local CLI agents at baseline. Full benchmark + concurrency-cap table lives in `plan.md` → **Post-Ship Performance Optimization** section.

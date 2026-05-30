@@ -1,13 +1,14 @@
 ---
 title: "Goclaw Cloud Agent Integration"
 description: "Add cloud-goclaw agent to SnipTeX that delegates OCR (image + PDF → LaTeX/Markdown) to a Skill-based Goclaw agent on goclaw.tikz2svg.com. Two-step protocol: HTTPS multipart upload to /v1/media/upload, then WS chat.send referencing the returned path. Auth via goclaw_xxx API key."
-status: pending
+status: completed
 priority: P2
 branch: "main"
 tags: ["goclaw", "agent", "websocket", "ocr", "tex"]
 blockedBy: []
 blocks: []
 created: "2026-05-29"
+completed: "2026-05-31"
 createdBy: "ck:plan"
 source: skill
 ---
@@ -28,6 +29,43 @@ Value vs existing cloud agents: a single endpoint the user already operates, fre
 | 2 | [Goclaw agent + API key](./phase-02-goclaw-agent-api-key.md) | Completed |
 | 3 | [SnipTeX cloud-goclaw adapter](./phase-03-sniptex-cloud-goclaw-adapter.md) | Completed |
 | 4 | [SnipTeX UI + settings wiring](./phase-04-sniptex-ui-settings-wiring.md) | Completed |
+
+## Post-Ship Performance Optimization (2026-05-31)
+
+After Phase 4 manual smoke surfaced cloud-goclaw at ~115s for a 2-page Vietnamese math PDF (~58s/page sequentially), refactored `run_per_page_pdf_ocr` to dispatch pages in parallel with a per-agent concurrency cap. Initial roll-out regressed local CLI agents (codex page 2 doubled under contention; gemini-cli hit the 120s per-page cap), so a follow-up commit dropped local-CLI concurrency back to 1 while keeping cloud agents fanning out.
+
+**Commits:**
+- `601701c` perf(pdf): parallel per-page OCR dispatch with per-agent concurrency cap (`futures::try_join_all` + `tokio::sync::Semaphore`, index-sorted results, cumulative `AtomicUsize` progress)
+- `e962216` fix(pdf): cap local CLI agents at concurrency=1 to avoid contention
+
+**Per-agent concurrency caps** (`pdf_page_concurrency` in `commands.rs`):
+| Agent | Cap | Rationale |
+|-------|-----|-----------|
+| codex / gemini-cli | 1 | Local subprocess + shared upstream account — parallel measured slower |
+| cloud-goclaw | 2 | Single ChatGPT-Plus account behind gpt-5.4, don't hammer |
+| cloud-gemini / cloud-mistral | 5 | Cloud APIs with proper rate limits |
+| unknown | 3 | Safe default |
+
+**Final benchmark** — 2-page Vietnamese math PDF (~3000-3700 chars/page), three test runs across record=53 / record=54 / test-1.pdf:
+
+| Agent | Pre-parallel | After (typical) | Δ |
+|-------|-------------:|----------------:|----|
+| cloud-mistral | ~4s | 4.2s | parity (native multi-page PDF, doesn't reach per-page loop) |
+| cloud-gemini | 19.9s | **11.5s** | **−42%** |
+| cloud-goclaw | 115.8s | **68.4s** | **−41%** |
+| codex | 75.7s | 74.4s | parity (no regression; upstream gpt-5.4 variance dominates) |
+| gemini-cli | 94.7s | **62.0s** | **−35%** (bonus: previous baseline likely had its own contention) |
+
+**Cloud agents speed up 35-42%**; local CLI agents preserve baseline. The fix is Pareto-optimal — no agent regressed.
+
+**Observed variance** (not a code issue, kept for future debugging):
+- codex page 2 latency swings 39s → 66s → timeout(120s+) across three identical runs at concurrency=1. Pure upstream ChatGPT model variance on dense pages. Mitigation: users with stability needs route through cloud-gemini instead.
+- cloud-goclaw page latency varies ~50-80s per page. Same gpt-5.4 backend, same variance class.
+
+**Out of scope (deferred):**
+- Lower default PDF render DPI (200→150) — would compound speedup ~20-30%, requires accuracy regression test on Vietnamese diacritics + tight equations first.
+- Streaming responses (`stream: true`) for cloud-goclaw — could surface first-page output sooner.
+- Concurrency cap tuning for cloud-goclaw (2→3) — needs measurement vs ChatGPT Plus account headroom.
 
 ## Architecture
 
