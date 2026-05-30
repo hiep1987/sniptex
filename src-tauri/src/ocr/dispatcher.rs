@@ -23,11 +23,12 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
+use crate::agents::cloud_goclaw_api::{self, CloudGoclawError};
 use crate::agents::cloud_mistral_api::{self, CloudMistralError};
 use crate::agents::keychain;
 use crate::agents::registry::{
-    build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CODEX_ID,
-    GEMINI_CLI_ID,
+    build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
+    CODEX_ID, GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
@@ -99,6 +100,23 @@ impl From<CloudMistralError> for DispatchError {
             CloudMistralError::Network(m) => DispatchError::Network(m),
             CloudMistralError::EmptyResponse => DispatchError::EmptyOutput,
             CloudMistralError::Parse(m) => DispatchError::BadRequest(m),
+        }
+    }
+}
+
+impl From<CloudGoclawError> for DispatchError {
+    fn from(e: CloudGoclawError) -> Self {
+        match e {
+            CloudGoclawError::RateLimited => DispatchError::RateLimited,
+            CloudGoclawError::BadRequest(m) => DispatchError::BadRequest(m),
+            CloudGoclawError::AuthFailed(c) => DispatchError::AuthFailed(c),
+            CloudGoclawError::ServerError(c, m) => DispatchError::NonZeroExit {
+                code: c as i32,
+                stderr: m,
+            },
+            CloudGoclawError::Network(m) => DispatchError::Network(m),
+            CloudGoclawError::EmptyResponse => DispatchError::EmptyOutput,
+            CloudGoclawError::Parse(m) => DispatchError::BadRequest(m),
         }
     }
 }
@@ -378,6 +396,11 @@ async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, 
             let key = keychain::get_mistral_api_key()
                 .map_err(|_| DispatchError::MissingApiKey("mistral"))?;
             cloud_mistral_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
+        }
+        CLOUD_GOCLAW_ID => {
+            let key = keychain::get_cloud_goclaw_api_key()
+                .map_err(|_| DispatchError::MissingApiKey("cloud-goclaw"))?;
+            cloud_goclaw_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
         }
         _ => return Err(DispatchError::AgentNotAvailable(agent.spec.id.to_string())),
     };

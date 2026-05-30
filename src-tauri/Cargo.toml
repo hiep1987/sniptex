@@ -32,9 +32,15 @@ regex = "1"
 thiserror = "1"
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 base64 = "0.22"
 keyring = "3"
+
+# Phase 3 (260529-2320): WebSocket client for Goclaw cloud agent. Pinned to the same
+# rustls-native-roots trust store reqwest already uses to avoid double-linking two
+# root certificate stores.
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-native-roots", "connect"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 # Phase 4: screen capture + region selector
 xcap = "0.9"
@@ -79,6 +85,10 @@ path = "tests/rust/cloud_gemini_api_test.rs"
 [[test]]
 name = "cloud_mistral_api"
 path = "tests/rust/cloud_mistral_api_test.rs"
+
+[[test]]
+name = "cloud_goclaw_api"
+path = "tests/rust/cloud_goclaw_api_test.rs"
 
 [[test]]
 name = "agent_registry_argv"
