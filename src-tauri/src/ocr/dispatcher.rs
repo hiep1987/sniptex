@@ -73,7 +73,7 @@ impl From<std::io::Error> for DispatchError {
 impl From<CloudGeminiError> for DispatchError {
     fn from(e: CloudGeminiError) -> Self {
         match e {
-            CloudGeminiError::RateLimited => DispatchError::RateLimited,
+            CloudGeminiError::RateLimited(_) => DispatchError::RateLimited,
             CloudGeminiError::BadRequest(m) => DispatchError::BadRequest(m),
             CloudGeminiError::AuthFailed(c) => DispatchError::AuthFailed(c),
             CloudGeminiError::ServerError(c, m) => DispatchError::NonZeroExit {

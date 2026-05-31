@@ -17,8 +17,16 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudGeminiError {
-    #[error("rate limited (HTTP 429)")]
-    RateLimited,
+    /// HTTP 429. Google uses this for two distinct failure modes:
+    ///   - transient per-minute throttling (RPM/TPM exceeded)
+    ///   - permanent `limit: 0` when the project tied to a new
+    ///     AI-Studio-issued key has no Gemini quota provisioned (common
+    ///     with the newer `AQ.…` Express keys until billing is enabled
+    ///     or quota propagates).
+    /// Surface Google's own message so the user can tell the two apart
+    /// instead of blindly retrying a permanent failure.
+    #[error("rate limited or quota exhausted (HTTP 429): {0}")]
+    RateLimited(String),
     #[error("bad request: {0}")]
     BadRequest(String),
     #[error("auth failed (HTTP {0})")]
@@ -152,7 +160,7 @@ async fn call_with_timeout(
 
     if !status.is_success() {
         return Err(match status.as_u16() {
-            429 => CloudGeminiError::RateLimited,
+            429 => CloudGeminiError::RateLimited(redact_key(&extract_error_message(&text))),
             400 => CloudGeminiError::BadRequest(redact_key(&text)),
             401 | 403 => CloudGeminiError::AuthFailed(status.as_u16()),
             code => CloudGeminiError::ServerError(code, redact_key(&text)),
@@ -205,14 +213,41 @@ pub async fn call_with_pdf_path(
     call_with_timeout(&bytes, "application/pdf", prompt, api_key, timeout).await
 }
 
-/// Best-effort redaction of an `AIza...` Google API key from error
-/// strings so we can attach upstream messages without leaking secrets.
+/// Best-effort redaction of Google API key formats from error strings:
+///   - legacy `AIza…` (39 chars total)
+///   - newer Express-mode `AQ.Ab8…` (variable length, base64url body)
+/// Belt-and-suspenders: Google's error JSON does not echo back the key,
+/// but request URLs and stray logs sometimes do.
 fn redact_key(s: &str) -> String {
     use regex::Regex;
     use std::sync::OnceLock;
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"AIza[0-9A-Za-z_\-]{35}").unwrap());
-    re.replace_all(s, "AIza<redacted>").to_string()
+    static RE_AIZA: OnceLock<Regex> = OnceLock::new();
+    static RE_AQ: OnceLock<Regex> = OnceLock::new();
+    let re_aiza = RE_AIZA.get_or_init(|| Regex::new(r"AIza[0-9A-Za-z_\-]{35}").unwrap());
+    let re_aq = RE_AQ.get_or_init(|| Regex::new(r"AQ\.[0-9A-Za-z_\-]{40,}").unwrap());
+    let step1 = re_aiza.replace_all(s, "AIza<redacted>");
+    re_aq.replace_all(&step1, "AQ.<redacted>").to_string()
+}
+
+/// Pull the human-readable `error.message` out of Google's error JSON.
+/// Falls back to the first 500 chars of the raw body if parsing fails,
+/// so we still surface *something* useful instead of silently dropping
+/// the upstream signal.
+fn extract_error_message(body: &str) -> String {
+    #[derive(Deserialize)]
+    struct ErrorEnvelope {
+        error: ErrorBody,
+    }
+    #[derive(Deserialize)]
+    struct ErrorBody {
+        message: Option<String>,
+    }
+    if let Ok(env) = serde_json::from_str::<ErrorEnvelope>(body) {
+        if let Some(msg) = env.error.message {
+            return msg;
+        }
+    }
+    body.chars().take(500).collect()
 }
 
 #[cfg(test)]
@@ -225,6 +260,28 @@ mod tests {
         let cleaned = redact_key(raw);
         assert!(!cleaned.contains("AIzaSyD1234567890"));
         assert!(cleaned.contains("AIza<redacted>"));
+    }
+
+    #[test]
+    fn redact_strips_express_aq_key_pattern() {
+        let raw = "url ...?key=AQ.Ab8RN6KPRUC5zQUsyMhqNQTrmXvhIjSvrkDZxrIVpJ8ohbUYDg failed";
+        let cleaned = redact_key(raw);
+        assert!(!cleaned.contains("AQ.Ab8RN6"));
+        assert!(cleaned.contains("AQ.<redacted>"));
+    }
+
+    #[test]
+    fn extract_error_message_pulls_google_error_field() {
+        let body = r#"{"error":{"code":429,"message":"Quota exceeded for metric X","status":"RESOURCE_EXHAUSTED"}}"#;
+        let msg = extract_error_message(body);
+        assert_eq!(msg, "Quota exceeded for metric X");
+    }
+
+    #[test]
+    fn extract_error_message_falls_back_to_raw_body() {
+        let body = "<html>500 Internal Server Error</html>";
+        let msg = extract_error_message(body);
+        assert_eq!(msg, body);
     }
 
     #[test]
