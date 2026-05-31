@@ -20,7 +20,7 @@ use crate::agents::{
     registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID},
 };
 use crate::capture::{
-    capture_active_monitor, crop_region_to_temp_png, CaptureError, CropError, MonitorSnapshot,
+    active_monitor_geometry, capture_monitor_region_to_temp_png, CaptureError, MonitorGeometry,
     SelectionRect,
 };
 use crate::ocr::{self, dispatcher::DispatchError, smart_format::DetectedType};
@@ -41,6 +41,7 @@ const CAPTURE_CANCEL_EVENT: &str = "capture-cancel";
 // to switch contexts, short enough to avoid stale overlays if something
 // kills the frontend mid-flow.
 const SELECTION_TIMEOUT: Duration = Duration::from_secs(60);
+const POST_OVERLAY_HIDE_CAPTURE_DELAY: Duration = Duration::from_millis(80);
 
 #[derive(Serialize)]
 pub struct HelloReply {
@@ -224,15 +225,14 @@ pub async fn test_api_key(
     })
 }
 
-/// End-to-end snip: cursor-monitor screenshot → overlay drag-select →
-/// crop → OCR (specific agent or fallback chain).
+/// End-to-end snip: cursor-monitor geometry → overlay drag-select →
+/// region screenshot → OCR (specific agent or fallback chain).
 ///
 /// Returns `SnipResult` with `status` = `"ok" | "cancelled"`. On `ok`
 /// the `text`, `detected`, and `agent` fields are populated; the cropped
 /// PNG is moved into the persistent history dir (so "Rerun with…" can
 /// re-OCR the same image with a different agent) and a `HistoryRecord`
-/// row is inserted. On `cancelled` only the full-monitor PNG is cleaned
-/// up.
+/// row is inserted. On `cancelled` no screenshot is written.
 #[tauri::command]
 pub async fn run_snip(
     app: AppHandle,
@@ -245,23 +245,13 @@ pub async fn run_snip(
     let _busy = SnipBusyGuard::try_acquire()
         .ok_or_else(|| "snip already in progress".to_string())?;
 
-    // Hide every visible SnipTeX surface BEFORE the screenshot — otherwise
-    // the main / settings / history window itself ends up in the captured
-    // backdrop and the user can't drag-select what's behind it.
-    //
-    // On macOS we use `AppHandle::hide()` (whole-app NSApplication.hide:)
-    // so the next app's window actually comes forward and macOS repaints
-    // the screen properly before xcap reads the framebuffer. Per-window
-    // hide doesn't deactivate the app and the compositor leaves the
-    // newly-uncovered region stale.
-    //
-    // The 300 ms delay covers two things: the macOS deactivate animation
-    // (~200 ms) and the next-app's window-server repaint. Empirically
-    // 150 ms is too short on Apple Silicon under heavier load.
+    // Hide visible SnipTeX surfaces before showing the selector so the
+    // user can select content behind them. The screenshot itself is now
+    // delayed until after selection, so hotkey-to-overlay is not blocked
+    // by full-monitor capture or PNG encoding.
     #[cfg(target_os = "macos")]
     let _ = app.hide();
     let _vis_guard = CaptureVisibilityGuard::hide_user_windows(&app);
-    tokio::time::sleep(Duration::from_millis(300)).await;
 
     tray::set_status(&app, TrayStatus::Capturing);
     let result = run_snip_inner(&app, agent_id).await;
@@ -304,17 +294,12 @@ async fn run_snip_inner(
     let cursor_x = (cursor.x / primary_scale).round() as i32;
     let cursor_y = (cursor.y / primary_scale).round() as i32;
 
-    let snapshot = tokio::task::spawn_blocking(move || capture_active_monitor(cursor_x, cursor_y))
+    let geometry = tokio::task::spawn_blocking(move || active_monitor_geometry(cursor_x, cursor_y))
         .await
-        .map_err(|e| format!("capture join failed: {e}"))?
+        .map_err(|e| format!("monitor geometry join failed: {e}"))?
         .map_err(stringify_capture_error)?;
 
-    // RAII: the captured full-monitor PNG MUST be removed on every exit
-    // path (success, cancel, crop fail, OCR fail, panic). Holding the
-    // guard until end-of-function makes that mechanical.
-    let _full_png_guard = TempFileGuard::new(snapshot.full_png_path.clone());
-
-    let selection = show_overlay_and_await_selection(app, &snapshot).await?;
+    let selection = show_overlay_and_await_selection(app, &geometry).await?;
 
     let Some(sel) = selection else {
         return Ok(SnipResult {
@@ -332,14 +317,18 @@ async fn run_snip_inner(
     // the slow path (network/CLI) is in progress.
     tray::set_status(app, TrayStatus::Processing);
 
-    let full_path = snapshot.full_png_path.clone();
-    let scale = snapshot.scale_factor;
+    // Give the window server one frame to remove the overlay before the
+    // actual region capture, otherwise transparent-window compositing can
+    // occasionally leave the selection UI in the captured image on macOS.
+    tokio::time::sleep(POST_OVERLAY_HIDE_CAPTURE_DELAY).await;
+
+    let capture_geometry = geometry.clone();
     let cropped_path = tokio::task::spawn_blocking(move || {
-        crop_region_to_temp_png(&full_path, sel, scale)
+        capture_monitor_region_to_temp_png(&capture_geometry, sel)
     })
     .await
-    .map_err(|e| format!("crop join failed: {e}"))?
-    .map_err(stringify_crop_error)?;
+    .map_err(|e| format!("region capture join failed: {e}"))?
+    .map_err(stringify_capture_error)?;
 
     // Cropped PNG is held under a guard until we successfully move it
     // into the persistent history dir below; if OCR errors out the guard
@@ -483,7 +472,7 @@ fn detected_from_string(s: &str) -> DetectedType {
 
 async fn show_overlay_and_await_selection(
     app: &AppHandle,
-    snapshot: &MonitorSnapshot,
+    geometry: &MonitorGeometry,
 ) -> Result<Option<SelectionRect>, String> {
     let overlay = app
         .get_webview_window(OVERLAY_WINDOW_LABEL)
@@ -504,14 +493,14 @@ async fn show_overlay_and_await_selection(
     // Windows xcap is platform-different — verify in Phase 10 port.
     overlay
         .set_position(LogicalPosition::new(
-            snapshot.monitor_x as f64,
-            snapshot.monitor_y as f64,
+            geometry.monitor_x as f64,
+            geometry.monitor_y as f64,
         ))
         .map_err(|e| format!("overlay set_position: {e}"))?;
     overlay
         .set_size(LogicalSize::new(
-            snapshot.logical_width as f64,
-            snapshot.logical_height as f64,
+            geometry.logical_width as f64,
+            geometry.logical_height as f64,
         ))
         .map_err(|e| format!("overlay set_size: {e}"))?;
 
@@ -551,12 +540,12 @@ async fn show_overlay_and_await_selection(
     };
 
     let payload = CaptureStartPayload {
-        backdrop_path: snapshot.full_png_path.to_string_lossy().into_owned(),
-        logical_width: snapshot.logical_width,
-        logical_height: snapshot.logical_height,
-        pixel_width: snapshot.pixel_width,
-        pixel_height: snapshot.pixel_height,
-        scale_factor: snapshot.scale_factor,
+        backdrop_path: None,
+        logical_width: geometry.logical_width,
+        logical_height: geometry.logical_height,
+        pixel_width: geometry.pixel_width,
+        pixel_height: geometry.pixel_height,
+        scale_factor: geometry.scale_factor,
     };
     overlay
         .emit(CAPTURE_START_EVENT, &payload)
@@ -605,7 +594,7 @@ async fn run_ocr_for_path(
 
 #[derive(Serialize)]
 pub struct CaptureStartPayload {
-    pub backdrop_path: String,
+    pub backdrop_path: Option<String>,
     pub logical_width: u32,
     pub logical_height: u32,
     pub pixel_width: u32,
@@ -657,10 +646,6 @@ fn stringify_dispatch_error(e: DispatchError) -> String {
 }
 
 fn stringify_capture_error(e: CaptureError) -> String {
-    e.to_string()
-}
-
-fn stringify_crop_error(e: CropError) -> String {
     e.to_string()
 }
 

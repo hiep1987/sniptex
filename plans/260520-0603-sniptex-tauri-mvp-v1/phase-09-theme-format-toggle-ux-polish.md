@@ -8,6 +8,7 @@ dependencies: [8]
 ---
 
 > **Partial ship 2026-05-31:** LaTeX `tabular` slice landed first (closes user-reported "Copy as TeX = Markdown" bug on table snips). Complex-grid reconstruction for flattened `cloud-mistral` OCR tables also landed. Theme switch / sounds / animations / Toast / queueing still pending.
+> **UX latency fix 2026-05-31:** Hotkey-to-selector latency fixed by switching from "capture full monitor PNG before overlay" to "show live transparent overlay first, capture selected region after mouse-up".
 
 # Phase 9: Theme & Format Toggle & UX Polish
 
@@ -24,6 +25,7 @@ Implement system/light/dark theme switching, the format toggle (Smart/Inline/Dis
 - LaTeX tabular mode: post-process Markdown tables into `\begin{tabular}{...}...\end{tabular}`. Requires a dedicated validation pass on the 9 TABLE_ONLY fixtures from Phase 1.
 - `cloud-mistral` uses Mistral OCR API (`mistral-ocr-latest` / dashboard `mistral-ocr-2512`), not prompt-controlled chat completion. Complex-grid quality therefore lives in deterministic Markdown-to-TeX reconstruction, not prompt tuning.
 - Complex LaTeX table reconstruction is active for known table groups. Current taxonomy is documented in `docs/latex-table-reconstruction.md`: simple grid, two-level column header, title row spanning all columns, and raw complex LaTeX pass-through.
+- Capture overlay latency: selector must appear immediately on `Cmd+Shift+M`; do not block overlay display on screenshot capture or full-monitor PNG encoding.
 - Sound: short success chime on clipboard copy; respect `sound_on_success` setting from Phase 8.
 - Animations: preview window fade-in/out, tray icon state transitions.
 
@@ -97,6 +99,22 @@ document.documentElement.classList.toggle('dark')
 Tauri: window.set_background_color() for native frame
 ```
 
+### Capture Overlay Fast Path
+
+```
+hotkey
+  ↓
+hide SnipTeX windows + read monitor geometry only
+  ↓
+show transparent overlay immediately
+  ↓
+user selects region
+  ↓
+hide overlay, wait one compositor frame, capture selected region only
+  ↓
+OCR
+```
+
 ## Related Code Files
 
 - Create: `src-tauri/src/ocr/format_converter.rs` — all format conversion functions
@@ -109,6 +127,8 @@ Tauri: window.set_background_color() for native frame
 - Create: `src/components/Toast.tsx` — error/success toast notifications
 - Create: `src/hooks/useTheme.ts` — theme hook reading from settings store
 - Modify: `src/styles/globals.css` — CSS variables for light/dark themes
+- Modify: `src-tauri/src/capture/screenshot.rs` — monitor geometry + selected-region capture fast path
+- Modify: `src/windows/capture-overlay-window.tsx` — live transparent selector that no longer requires a pre-rendered backdrop image
 - Create: `src-tauri/resources/sounds/success.wav` — short chime (~0.3s)
 - Modify: `src/stores/settingsStore.ts` — wire theme + sound preferences
 
@@ -133,6 +153,7 @@ Tauri: window.set_background_color() for native frame
 - [x] Reconstruct flattened complex-grid table output from `cloud-mistral` OCR API — `src-tauri/src/ocr/tabular_complex_grid.rs`; integration tests cover live `cloud-mistral`, `cloud-gemini`, `cloud-goclaw`, and `gemini-cli` shapes for the "Nhóm / Loại I / Loại II" fixture
 - [x] Reconstruct title-row span tables — `Country List` fixture now emits `\multicolumn{3}{|c|}{Country List}` and `\begin{tabular}{|l|c|c|}`
 - [x] Document supported LaTeX table groups — `docs/latex-table-reconstruction.md`
+- [x] Fix hotkey-to-overlay latency — overlay now appears before screenshot capture; backend captures only the selected region after overlay hide
 - [x] Wire `convert_to_tex` Tauri command (slice of original `convert_format`) — registered in `lib.rs`, called from `src/lib/format.ts` `case "tex"`; `export_record` LaTeX branch now reuses the same converter
 - [ ] Validate tabular conversion against 9 TABLE_ONLY fixtures (manual sweep pending; 1/9 covered by câu 7 test + complex merged-header fixture covered by 4-agent integration tests)
 - [ ] Build ThemeProvider + CSS variable system
@@ -156,6 +177,7 @@ Tauri: window.set_background_color() for native frame
 ## Risk Assessment
 
 - **Risk: unsupported complex table shapes** — Mitigation: supported shapes are documented and fixture-driven; unknown complex-grid Markdown falls back to simple table conversion instead of guessing arbitrary spans.
+- **Risk: overlay appears in captured image after live-selector refactor** — Mitigation: emit region, deactivate overlay UI, hide overlay via RAII, then wait one compositor frame before `xcap.capture_region`.
 - **Risk: Sound playback fails on some systems** — Mitigation: wrap in try-catch, degrade silently; sound is non-critical UX.
 - **Risk: Theme flash on app startup** — Mitigation: read theme from store in Rust before creating webview; inject as `data-theme` attribute on HTML element in `index.html` inline script.
 

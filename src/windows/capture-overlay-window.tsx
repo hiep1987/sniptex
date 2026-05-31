@@ -9,7 +9,7 @@ import {
 } from "@/components/capture-overlay-guides";
 
 type CaptureStart = {
-  backdrop_path: string;
+  backdrop_path?: string | null;
   logical_width: number;
   logical_height: number;
   pixel_width: number;
@@ -25,6 +25,7 @@ const CAPTURE_REGION = "capture-region";
 const CAPTURE_CANCEL = "capture-cancel";
 
 export default function CaptureOverlayWindow() {
+  const [active, setActive] = useState(false);
   const [backdrop, setBackdrop] = useState<string | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [drag, setDrag] = useState<Rect | null>(null);
@@ -39,11 +40,12 @@ export default function CaptureOverlayWindow() {
 
     listen<CaptureStart>(CAPTURE_START, (event) => {
       const p = event.payload;
-      setBackdrop(convertFileSrc(p.backdrop_path));
+      setBackdrop(p.backdrop_path ? convertFileSrc(p.backdrop_path) : null);
       setSize({ w: p.logical_width, h: p.logical_height });
       setDrag(null);
       setPointer({ x: p.logical_width / 2, y: p.logical_height / 2 });
       dragStart.current = null;
+      setActive(true);
     })
       .then((fn) => {
         if (cancelled) fn();
@@ -63,6 +65,7 @@ export default function CaptureOverlayWindow() {
         e.preventDefault();
         void emit(CAPTURE_CANCEL);
         resetDrag();
+        setActive(false);
       } else if (e.key === "Enter") {
         const current = dragRef.current;
         if (current) {
@@ -87,6 +90,7 @@ export default function CaptureOverlayWindow() {
     }
     void emit(CAPTURE_REGION, rect);
     resetDrag();
+    setActive(false);
   }
 
   function onMouseDown(e: React.MouseEvent) {
@@ -112,7 +116,7 @@ export default function CaptureOverlayWindow() {
     commit(drag);
   }
 
-  if (!backdrop) {
+  if (!active) {
     return <div style={fullscreenContainerStyle} />;
   }
 
@@ -123,19 +127,21 @@ export default function CaptureOverlayWindow() {
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
     >
-      <img
-        src={backdrop}
-        alt=""
-        draggable={false}
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: size.w || "100vw",
-          height: size.h || "100vh",
-          userSelect: "none",
-          pointerEvents: "none",
-        }}
-      />
+      {backdrop && (
+        <img
+          src={backdrop}
+          alt=""
+          draggable={false}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: size.w || "100vw",
+            height: size.h || "100vh",
+            userSelect: "none",
+            pointerEvents: "none",
+          }}
+        />
+      )}
       <div style={dimMaskStyle(drag)} />
       {pointer && <CaptureCrosshair point={pointer} />}
       {drag && drag.w > 0 && drag.h > 0 && (
