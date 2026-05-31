@@ -1,6 +1,6 @@
 ---
-title: "Add Mistral Vision API as OCR Agent"
-description: "Add Mistral Vision API (pixtral/mistral-small-latest) as a fourth OCR provider. BYOK cloud agent, same pattern as cloud-gemini."
+title: "Add Mistral OCR API as OCR Agent"
+description: "Add Mistral OCR API (mistral-ocr-latest) as a fourth OCR provider. BYOK cloud agent, OCR endpoint only."
 status: completed
 priority: P2
 branch: "main"
@@ -12,15 +12,17 @@ createdBy: "ck:plan"
 source: skill
 ---
 
-# Add Mistral Vision API as OCR Agent
+# Add Mistral OCR API as OCR Agent
 
 ## Overview
 
-Add Mistral Vision API as a fourth OCR agent alongside Codex CLI, Gemini CLI, and Cloud Gemini. Mistral uses the OpenAI-compatible chat completions endpoint (`POST https://api.mistral.ai/v1/chat/completions`) with base64 inline images via `data:image/png;base64,...` in the `image_url` field. BYOK model: user provides their own Mistral API key, stored in OS keychain.
+Add Mistral OCR API as a fourth OCR agent alongside Codex CLI, Gemini CLI, and Cloud Gemini. Runtime uses the dedicated OCR endpoint only: `POST https://api.mistral.ai/v1/ocr` with `mistral-ocr-latest` (shown in billing as `mistral-ocr-2512`). BYOK model: user provides their own Mistral API key, stored in OS keychain.
+
+**Policy lock:** SnipTeX must not use Mistral Completion/chat models (`mistral-small-*`, `mistral-medium-*`, `mistral-large-*`) for the `cloud-mistral` agent. Complex table quality is handled by deterministic local reconstruction in `src-tauri/src/ocr/tabular_complex_grid.rs`.
 
 No new Cargo dependencies required -- `reqwest`, `base64`, `serde`, `serde_json` already present.
 
-**Model:** `mistral-small-latest` (vision-capable, cost-effective for OCR).
+**Model:** `mistral-ocr-latest` via Mistral OCR API.
 
 ## Phases
 
@@ -45,7 +47,7 @@ No new Cargo dependencies required -- `reqwest`, `base64`, `serde`, `serde_json`
 
 ## Key Decisions
 
-- **Model choice:** `mistral-small-latest` -- vision-capable, fast, cheap. User can override later via settings (Phase 8/9 scope).
+- **Model choice:** `mistral-ocr-latest` -- OCR API only. Do not add user-overridable Mistral chat/completion models for `cloud-mistral`.
 - **Fallback chain:** Append `cloud-mistral` after `cloud-gemini` in `DEFAULT_FALLBACK_CHAIN` so it serves as an additional fallback when Gemini fails.
 - **Error mapping:** Mistral returns standard HTTP status codes (429 rate limit, 401/403 auth, 400 bad request) -- map to existing `DispatchError` variants.
 

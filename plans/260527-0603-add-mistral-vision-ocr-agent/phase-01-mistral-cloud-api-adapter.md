@@ -1,41 +1,39 @@
 ---
 phase: 1
-title: "Mistral Cloud API Adapter"
+title: "Mistral OCR API Adapter"
 status: completed
 priority: P1
 effort: "1h"
 dependencies: []
 ---
 
-# Phase 1: Mistral Cloud API Adapter
+# Phase 1: Mistral OCR API Adapter
 
 ## Overview
 
-Create `src-tauri/src/agents/cloud_mistral_api.rs` -- an HTTP adapter that sends a base64-encoded image + OCR prompt to Mistral's chat completions endpoint and returns the text response. Follows the exact same pattern as `cloud_gemini_api.rs`.
+Create `src-tauri/src/agents/cloud_mistral_api.rs` -- an HTTP adapter that sends a base64-encoded image to Mistral's dedicated OCR endpoint and returns `pages[].markdown`.
+
+**Supersedes original draft:** this phase originally mentioned Mistral chat completions. Runtime now uses OCR API only. Do not use Mistral Completion/chat models for `cloud-mistral`.
 
 ## Architecture
 
-Mistral uses OpenAI-compatible chat completions format:
+Mistral uses the dedicated OCR endpoint:
 
 ```
-POST https://api.mistral.ai/v1/chat/completions
+POST https://api.mistral.ai/v1/ocr
 Authorization: Bearer <api_key>
 Content-Type: application/json
 
 {
-  "model": "mistral-small-latest",
-  "messages": [{
-    "role": "user",
-    "content": [
-      { "type": "text", "text": "<prompt>" },
-      { "type": "image_url", "image_url": "data:image/png;base64,<b64>" }
-    ]
-  }],
-  "max_tokens": 4096
+  "model": "mistral-ocr-latest",
+  "document": {
+    "type": "image_url",
+    "image_url": "data:image/png;base64,<b64>"
+  }
 }
 ```
 
-Response: `choices[0].message.content` contains the OCR text.
+Response: `pages[].markdown` contains the OCR text.
 
 ## Related Code Files
 
@@ -45,18 +43,18 @@ Response: `choices[0].message.content` contains the OCR text.
 ## Implementation Steps
 
 1. Create `cloud_mistral_api.rs` with:
-   - `pub const CLOUD_MISTRAL_MODEL: &str = "mistral-small-latest";`
+   - `pub const CLOUD_MISTRAL_MODEL: &str = "mistral-ocr-latest";`
    - `const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);`
    - `CloudMistralError` enum mirroring `CloudGeminiError` variants (RateLimited, BadRequest, AuthFailed, ServerError, Network, EmptyResponse, Parse)
-   - Request structs: `ChatCompletionRequest`, `Message`, `ContentPart` (text variant + image_url variant)
-   - Response structs: `ChatCompletionResponse` with `choices[].message.content`
-   - `fn endpoint() -> &'static str` returning `"https://api.mistral.ai/v1/chat/completions"`
-   - `pub async fn call(image_bytes, mime_type, prompt, api_key) -> Result<String, CloudMistralError>`:
+   - Request structs: OCR request with `document.type = "image_url"` or `"document_url"`
+   - Response structs: OCR response with `pages[].markdown`
+   - `fn endpoint() -> &'static str` returning `"https://api.mistral.ai/v1/ocr"`
+   - `pub async fn call(image_bytes, mime_type, _prompt, api_key) -> Result<String, CloudMistralError>`:
      - Build `reqwest::Client` with 30s timeout
      - Base64-encode image, format as `data:{mime_type};base64,{encoded}`
      - POST with `Authorization: Bearer {api_key}` header
      - Map HTTP errors: 429 -> RateLimited, 400 -> BadRequest, 401/403 -> AuthFailed, 5xx -> ServerError
-     - Parse response, extract `choices[0].message.content`
+     - Parse response, extract non-empty `pages[].markdown`
    - `pub async fn call_with_image_path(image_path, prompt, api_key)` convenience wrapper (same as Gemini's)
    - `fn redact_key(s: &str) -> String` to strip `Bearer ...` tokens from error strings
 
@@ -75,5 +73,4 @@ Response: `choices[0].message.content` contains the OCR text.
 
 ## Risk Assessment
 
-- Mistral API format is OpenAI-compatible, well-documented. Low risk.
-- `max_tokens: 4096` sufficient for even complex LaTeX output.
+- Mistral OCR API returns flattened Markdown for some complex tables. Mitigation: local deterministic reconstruction in Phase 9 `tabular_complex_grid.rs`.

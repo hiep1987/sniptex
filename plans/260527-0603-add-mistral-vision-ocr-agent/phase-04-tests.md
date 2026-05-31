@@ -26,9 +26,9 @@ This phase does not cover end-to-end app validation with a real Mistral API key.
 1. Create `tests/rust/cloud_mistral_api_test.rs`:
    - `test_redact_strips_bearer_token` -- verify API key redaction in error strings
    - `test_mime_resolution` -- png/jpg/jpeg/webp mapping
-   - `test_parse_success_response` -- valid chat completion JSON -> extracted text
-   - `test_parse_empty_choices` -- empty choices array -> EmptyResponse error
-   - `test_parse_null_content` -- null message content -> EmptyResponse error
+   - `test_parse_success_response` -- valid OCR JSON `pages[].markdown` -> extracted text
+   - `test_parse_empty_pages` -- empty page list -> EmptyResponse error
+   - `test_parse_null_markdown` -- null markdown content -> EmptyResponse error
 
 2. Add `[[test]]` entry to `Cargo.toml`:
    ```toml

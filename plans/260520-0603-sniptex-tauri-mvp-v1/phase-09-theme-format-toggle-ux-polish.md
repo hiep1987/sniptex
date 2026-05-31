@@ -23,6 +23,7 @@ Implement system/light/dark theme switching, the format toggle (Smart/Inline/Dis
 - Format toggle: output format selection in Preview Window's "Copy as..." menu AND Settings → Formats tab (Phase 8 wires the schema, this phase implements the conversion logic).
 - LaTeX tabular mode: post-process Markdown tables into `\begin{tabular}{...}...\end{tabular}`. Requires a dedicated validation pass on the 9 TABLE_ONLY fixtures from Phase 1.
 - `cloud-mistral` uses Mistral OCR API (`mistral-ocr-latest` / dashboard `mistral-ocr-2512`), not prompt-controlled chat completion. Complex-grid quality therefore lives in deterministic Markdown-to-TeX reconstruction, not prompt tuning.
+- Complex LaTeX table reconstruction is active for known table groups. Current taxonomy is documented in `docs/latex-table-reconstruction.md`: simple grid, two-level column header, title row spanning all columns, and raw complex LaTeX pass-through.
 - Sound: short success chime on clipboard copy; respect `sound_on_success` setting from Phase 8.
 - Animations: preview window fade-in/out, tray icon state transitions.
 
@@ -73,6 +74,17 @@ clipboard copy + preview render
 //                    \end{tabular}
 ```
 
+### Complex Table Reconstruction
+
+Handled as deterministic OCR Markdown → TeX post-processing, before the generic Markdown table converter:
+
+- **Simple grid** — normal Markdown table to `tabular`.
+- **Two-level column header** — reconstructs `\multirow`, `\multicolumn{N}{c|}{...}`, and `\cline`, validated on the `Nhóm / Loại I / Loại II` fixture across `cloud-mistral`, `cloud-gemini`, `cloud-goclaw`, and `gemini-cli` flattened outputs.
+- **Title row spanning all columns** — reconstructs `\multicolumn{N}{|c|}{...}`, validated on the `Country List` fixture.
+- **Raw complex LaTeX from agent** — preserves existing `\multirow`, `\multicolumn`, and `\cline` blocks instead of flattening them to Markdown.
+
+Reference: `docs/latex-table-reconstruction.md`.
+
 ### Theme System
 
 ```
@@ -119,6 +131,8 @@ Tauri: window.set_background_color() for native frame
 - [ ] Implement format_converter.rs (7 format variants)
 - [x] Implement tabular.rs (Markdown → LaTeX tabular) — `src-tauri/src/ocr/tabular.rs`; 8 unit tests incl. câu 7 price-table fixture
 - [x] Reconstruct flattened complex-grid table output from `cloud-mistral` OCR API — `src-tauri/src/ocr/tabular_complex_grid.rs`; integration tests cover live `cloud-mistral`, `cloud-gemini`, `cloud-goclaw`, and `gemini-cli` shapes for the "Nhóm / Loại I / Loại II" fixture
+- [x] Reconstruct title-row span tables — `Country List` fixture now emits `\multicolumn{3}{|c|}{Country List}` and `\begin{tabular}{|l|c|c|}`
+- [x] Document supported LaTeX table groups — `docs/latex-table-reconstruction.md`
 - [x] Wire `convert_to_tex` Tauri command (slice of original `convert_format`) — registered in `lib.rs`, called from `src/lib/format.ts` `case "tex"`; `export_record` LaTeX branch now reuses the same converter
 - [ ] Validate tabular conversion against 9 TABLE_ONLY fixtures (manual sweep pending; 1/9 covered by câu 7 test + complex merged-header fixture covered by 4-agent integration tests)
 - [ ] Build ThemeProvider + CSS variable system
@@ -141,7 +155,7 @@ Tauri: window.set_background_color() for native frame
 
 ## Risk Assessment
 
-- **Risk: LaTeX tabular edge cases (merged cells, multiline cells)** — Mitigation: v1 supports simple tables only; complex tables fall back to Markdown. Document limitation.
+- **Risk: unsupported complex table shapes** — Mitigation: supported shapes are documented and fixture-driven; unknown complex-grid Markdown falls back to simple table conversion instead of guessing arbitrary spans.
 - **Risk: Sound playback fails on some systems** — Mitigation: wrap in try-catch, degrade silently; sound is non-critical UX.
 - **Risk: Theme flash on app startup** — Mitigation: read theme from store in Rust before creating webview; inject as `data-theme` attribute on HTML element in `index.html` inline script.
 
