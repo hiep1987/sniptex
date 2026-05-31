@@ -724,6 +724,54 @@ pub struct PdfProgress {
     pub total: usize,
 }
 
+/// Per-run cancel token for the active PDF OCR. `run_pdf_ocr` installs
+/// a fresh token on entry and clears it on exit (via `PdfCancelSlot`
+/// RAII). `cancel_pdf_ocr` flips it; the in-flight task observes via
+/// `tokio::select!` and aborts at the next await point. A new token per
+/// run means a late cancel after the previous run completed is a no-op
+/// instead of poisoning the next run.
+static PDF_CANCEL: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
+
+struct PdfCancelSlot;
+
+impl PdfCancelSlot {
+    fn install() -> (Self, Arc<AtomicBool>) {
+        let token = Arc::new(AtomicBool::new(false));
+        if let Ok(mut slot) = PDF_CANCEL.lock() {
+            *slot = Some(token.clone());
+        }
+        (PdfCancelSlot, token)
+    }
+}
+
+impl Drop for PdfCancelSlot {
+    fn drop(&mut self) {
+        if let Ok(mut slot) = PDF_CANCEL.lock() {
+            *slot = None;
+        }
+    }
+}
+
+#[tauri::command]
+pub fn cancel_pdf_ocr() {
+    if let Ok(slot) = PDF_CANCEL.lock() {
+        if let Some(token) = slot.as_ref() {
+            token.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+fn cancelled_snip_result(pdf_path: String) -> SnipResult {
+    SnipResult {
+        status: "cancelled".into(),
+        text: None,
+        detected: None,
+        agent: None,
+        image_path: Some(pdf_path),
+        record_id: None,
+    }
+}
+
 #[tauri::command]
 pub async fn run_pdf_ocr(
     app: AppHandle,
@@ -737,6 +785,8 @@ pub async fn run_pdf_ocr(
     if !is_pdf_path(&pdf_path) {
         return Err("expected a .pdf file".into());
     }
+
+    let (_cancel_slot, cancel_token) = PdfCancelSlot::install();
 
     let priority = app
         .try_state::<SettingsStore>()
@@ -755,7 +805,34 @@ pub async fn run_pdf_ocr(
 
     let ocr_started = Instant::now();
 
-    let text = dispatch_pdf_ocr(&app, agent, &pdf_path).await?;
+    // Race the OCR pipeline against a cancel watcher. When the user
+    // clicks Cancel, the token flips and the watcher wakes; tokio drops
+    // the work future, which in turn drops every per-page task / HTTP
+    // request at its next await point.
+    let cancel_watch = {
+        let token = cancel_token.clone();
+        async move {
+            while !token.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+            }
+        }
+    };
+
+    let text = tokio::select! {
+        biased;
+        _ = cancel_watch => {
+            log::info!("[pdf-ocr] cancelled by user");
+            return Ok(cancelled_snip_result(pdf_path));
+        }
+        res = dispatch_pdf_ocr(&app, agent, &pdf_path) => res?,
+    };
+
+    // Cancel could land between dispatch returning and persistence —
+    // honor it before we write to history.
+    if cancel_token.load(Ordering::SeqCst) {
+        log::info!("[pdf-ocr] cancelled after dispatch, skipping persist");
+        return Ok(cancelled_snip_result(pdf_path));
+    }
 
     let latency_ms = ocr_started.elapsed().as_millis() as i64;
     let cleaned = ocr::post_process(&text);

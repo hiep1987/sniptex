@@ -8,6 +8,7 @@ import {
   History as HistoryIcon,
   Keyboard,
   Settings as SettingsIcon,
+  X,
 } from "lucide-react";
 import { tauri, type HelloReply, type SnipResult } from "@/lib/invoke";
 import { useHotkeyStore } from "@/state/hotkey-store";
@@ -29,6 +30,7 @@ export default function App() {
   const [snipStatus, setSnipStatus] = useState<SnipStatus>("idle");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
+  const [pdfCancelling, setPdfCancelling] = useState(false);
   const { pressCount, lastPressedAt } = useHotkeyStore();
 
   useEffect(() => {
@@ -110,12 +112,25 @@ export default function App() {
 
       setPdfBusy(true);
       setPdfProgress(null);
-      await tauri.runPdfOcr(path);
+      const result = await tauri.runPdfOcr(path);
+      if (result.status === "cancelled") toast(strings.pdf.cancelled);
     } catch (err) {
       toast.error(strings.pdf.error, { description: String(err) });
     } finally {
       setPdfBusy(false);
       setPdfProgress(null);
+      setPdfCancelling(false);
+    }
+  };
+
+  const handlePdfCancel = async () => {
+    if (!pdfBusy || pdfCancelling) return;
+    setPdfCancelling(true);
+    try {
+      await tauri.cancelPdfOcr();
+    } catch (err) {
+      console.error("[main] cancel_pdf_ocr failed", err);
+      setPdfCancelling(false);
     }
   };
 
@@ -158,6 +173,18 @@ export default function App() {
                 : strings.pdf.processing
               : strings.pdf.open}
           </button>
+          {pdfBusy && (
+            <button
+              type="button"
+              onClick={handlePdfCancel}
+              disabled={pdfCancelling}
+              title={strings.pdf.cancel}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:bg-slate-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+            >
+              <X className="size-4" />
+              {pdfCancelling ? strings.pdf.cancelling : strings.pdf.cancel}
+            </button>
+          )}
         </div>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           Or press{" "}

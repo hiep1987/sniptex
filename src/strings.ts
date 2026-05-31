@@ -46,6 +46,9 @@ export const strings = {
       `Page ${page}/${total}…`,
     estimate: (total: number) => `~${total * 120}s max (${total} × 120s)`,
     error: "PDF processing failed",
+    cancel: "Cancel",
+    cancelling: "Cancelling…",
+    cancelled: "PDF cancelled",
   },
   onboarding: {
     title: "Welcome to SnipTeX",

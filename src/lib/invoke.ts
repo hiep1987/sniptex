@@ -88,6 +88,7 @@ export const tauri = {
     invoke<SnipResult>("run_snip", { agentId: agentId ?? null }),
   runPdfOcr: (pdfPath: string, agentId?: string) =>
     invoke<SnipResult>("run_pdf_ocr", { pdfPath, agentId: agentId ?? null }),
+  cancelPdfOcr: () => invoke<void>("cancel_pdf_ocr"),
   showWindow: (label: WindowLabel) =>
     invoke<void>("show_window", { label }),
   hideWindow: (label: WindowLabel) =>
