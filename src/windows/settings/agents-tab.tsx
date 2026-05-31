@@ -206,6 +206,21 @@ export default function AgentsTab() {
                         value={keyDraft}
                         onChange={setKeyDraft}
                         placeholder={cloud.placeholder}
+                        onTest={async () => {
+                          const providerKey = providerKeyFor(id);
+                          if (!providerKey) {
+                            return { ok: false, error: "unknown provider" };
+                          }
+                          try {
+                            const r = await tauri.testApiKey(
+                              providerKey,
+                              keyDraft.trim(),
+                            );
+                            return { ok: true, preview: r.preview };
+                          } catch (e) {
+                            return { ok: false, error: String(e) };
+                          }
+                        }}
                       />
                       <div className="flex gap-2">
                         <button

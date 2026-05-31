@@ -8,8 +8,8 @@ use tokio::sync::Semaphore;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize, Manager, State,
-    WebviewWindow,
+    path::BaseDirectory, AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize,
+    Manager, State, WebviewWindow,
 };
 #[cfg(desktop)]
 use tauri_plugin_autostart::ManagerExt;
@@ -140,6 +140,66 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
         }
         other => Err(format!("unsupported provider: {other}")),
     }
+}
+
+/// Validate a draft API key against the live cloud provider WITHOUT
+/// persisting it. Runs OCR on a bundled reference image (a sample math
+/// question) so a green check means the key actually authenticates and
+/// produces output, not just that it parses as a string.
+#[tauri::command]
+pub async fn test_api_key(
+    app: AppHandle,
+    provider: String,
+    key: String,
+) -> Result<TestKeyReport, String> {
+    use crate::agents::{cloud_gemini_api, cloud_goclaw_api, cloud_mistral_api};
+
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        return Err("empty api key".into());
+    }
+
+    let image_path = app
+        .path()
+        .resolve("resources/test-api-key.png", BaseDirectory::Resource)
+        .map_err(|e| format!("resolve test image: {e}"))?;
+    let image_path_str = image_path.to_string_lossy().to_string();
+
+    let text = match provider.as_str() {
+        "gemini" => cloud_gemini_api::call_with_image_path(
+            &image_path_str,
+            ocr::MASTER_PROMPT,
+            trimmed,
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+        "mistral" => cloud_mistral_api::call_with_image_path(
+            &image_path_str,
+            ocr::MASTER_PROMPT,
+            trimmed,
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+        "goclaw" => cloud_goclaw_api::call_with_image_path(
+            &image_path_str,
+            ocr::MASTER_PROMPT,
+            trimmed,
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+        other => return Err(format!("unsupported provider: {other}")),
+    };
+
+    let cleaned = ocr::post_process(&text);
+    if cleaned.is_empty() || cleaned == "[UNREADABLE]" {
+        return Err("api key authenticated but OCR returned empty output".into());
+    }
+
+    Ok(TestKeyReport {
+        ok: true,
+        char_count: cleaned.chars().count(),
+        preview: preview(&cleaned, 200),
+    })
 }
 
 /// End-to-end snip: cursor-monitor screenshot → overlay drag-select →
@@ -549,6 +609,13 @@ impl From<SelectionRectPayload> for SelectionRect {
 pub struct TestAgentReport {
     pub ok: bool,
     pub detected: DetectedType,
+    pub char_count: usize,
+    pub preview: String,
+}
+
+#[derive(Serialize)]
+pub struct TestKeyReport {
+    pub ok: bool,
     pub char_count: usize,
     pub preview: String,
 }

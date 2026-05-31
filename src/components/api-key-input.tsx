@@ -3,10 +3,12 @@ import { Eye, EyeOff, ClipboardPaste, Loader2 } from "lucide-react";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { cn } from "@/lib/cn";
 
+type TestOutcome = { ok: true; preview?: string } | { ok: false; error: string };
+
 type Props = {
   value: string;
   onChange: (key: string) => void;
-  onTest?: () => Promise<boolean>;
+  onTest?: () => Promise<TestOutcome>;
   placeholder?: string;
   className?: string;
 };
@@ -20,7 +22,7 @@ export default function ApiKeyInput({
 }: Props) {
   const [visible, setVisible] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [testResult, setTestResult] = useState<TestOutcome | null>(null);
 
   const handlePaste = async () => {
     try {
@@ -36,10 +38,10 @@ export default function ApiKeyInput({
     setTesting(true);
     setTestResult(null);
     try {
-      const ok = await onTest();
-      setTestResult(ok);
-    } catch {
-      setTestResult(false);
+      const outcome = await onTest();
+      setTestResult(outcome);
+    } catch (e) {
+      setTestResult({ ok: false, error: String(e) });
     } finally {
       setTesting(false);
     }
@@ -96,16 +98,30 @@ export default function ApiKeyInput({
       </div>
 
       {testResult !== null && (
-        <p
+        <div
           className={cn(
-            "text-xs",
-            testResult
+            "space-y-1 text-xs",
+            testResult.ok
               ? "text-green-600 dark:text-green-400"
               : "text-red-600 dark:text-red-400",
           )}
         >
-          {testResult ? "Key is valid." : "Key test failed. Check the key and try again."}
-        </p>
+          <p>
+            {testResult.ok
+              ? "Key is valid — OCR returned a response."
+              : "Key test failed."}
+          </p>
+          {testResult.ok && testResult.preview && (
+            <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              {testResult.preview}
+            </p>
+          )}
+          {!testResult.ok && (
+            <p className="font-mono text-[11px] break-words text-red-500 dark:text-red-400">
+              {testResult.error}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

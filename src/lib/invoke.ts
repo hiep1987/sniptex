@@ -113,6 +113,11 @@ export const tauri = {
     invoke<boolean>("has_api_key", { provider }),
   deleteApiKey: (provider: string) =>
     invoke<void>("delete_api_key", { provider }),
+  testApiKey: (provider: string, key: string) =>
+    invoke<{ ok: boolean; char_count: number; preview: string }>(
+      "test_api_key",
+      { provider, key },
+    ),
 
   // Agent detection
   detectAgents: () => invoke<AgentInfo[]>("detect_agents"),
