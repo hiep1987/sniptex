@@ -61,6 +61,10 @@ function ExtLink({ href, children }: { href: string; children: React.ReactNode }
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={(e) => {
+        e.preventDefault();
+        void tauri.openExternal(href);
+      }}
       className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 hover:underline dark:text-slate-300 dark:hover:text-white"
     >
       <ExternalLink className="size-3.5" />

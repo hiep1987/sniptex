@@ -11,9 +11,9 @@ mod tray;
 
 use commands::{
     cancel_pdf_ocr, delete_api_key, delete_record, detect_agents, export_record, get_history,
-    get_settings, has_api_key, hello, hide_window, rebind_hotkey, rerun_snip, run_pdf_ocr,
-    run_snip, search_history, set_api_key, set_launch_at_login, show_window, test_agent,
-    test_api_key, update_settings,
+    get_settings, has_api_key, hello, hide_window, open_external, rebind_hotkey, rerun_snip,
+    run_pdf_ocr, run_snip, search_history, set_api_key, set_launch_at_login, show_window,
+    test_agent, test_api_key, update_settings,
 };
 
 use tauri::Manager;
@@ -110,6 +110,7 @@ pub fn run() {
             cancel_pdf_ocr,
             show_window,
             hide_window,
+            open_external,
             get_history,
             search_history,
             delete_record,

@@ -59,6 +59,28 @@ pub fn hello(name: Option<String>) -> HelloReply {
 
 /// Show a Tauri window by label and bring it to focus. Used by tray
 /// menu items and onboarding/settings cross-navigation.
+/// Open an http(s) URL in the user's default browser. Tauri's webview
+/// ignores `target="_blank"` on plain anchors, so all "Get a free key"
+/// / docs / repo links route through here. http(s)-only on purpose: a
+/// `file://` or `javascript:` URL passed from a compromised renderer
+/// shouldn't be able to launch arbitrary handlers.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("only http(s) urls allowed".into());
+    }
+    #[cfg(target_os = "macos")]
+    let spawn = std::process::Command::new("open").arg(&url).spawn();
+    #[cfg(target_os = "windows")]
+    let spawn = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let spawn = std::process::Command::new("xdg-open").arg(&url).spawn();
+
+    spawn.map(|_| ()).map_err(|e| format!("open url: {e}"))
+}
+
 #[tauri::command]
 pub fn show_window(app: AppHandle, label: String) -> Result<(), String> {
     let window = app

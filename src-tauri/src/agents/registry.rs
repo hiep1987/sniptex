@@ -65,7 +65,7 @@ pub const AGENTS: &[AgentSpec] = &[
     },
     AgentSpec {
         id: CLOUD_GEMINI_ID,
-        display_name: "Gemini Vision API",
+        display_name: "Gemini API",
         binary_names: &[],
         supports_vision: true,
         kind: AgentKind::CloudApi,

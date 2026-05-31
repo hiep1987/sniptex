@@ -7,21 +7,24 @@ import { cn } from "@/lib/cn";
 
 const CLOUD_PROVIDERS: Record<
   string,
-  { keyLabel: string; getKeyUrl: string; placeholder: string }
+  { keyLabel: string; getKeyUrl: string; placeholder: string; linkLabel?: string }
 > = {
   "cloud-gemini": {
     keyLabel: "Google AI Studio",
-    getKeyUrl: "https://aistudio.google.com/apikey",
+    getKeyUrl: "https://aistudio.google.com/api-keys",
     placeholder: "Paste Google AI Studio API key (AIza…)",
   },
   "cloud-mistral": {
-    keyLabel: "Mistral Console",
-    getKeyUrl: "https://console.mistral.ai/api-keys",
-    placeholder: "Paste Mistral Console API key",
+    keyLabel: "Mistral Admin",
+    getKeyUrl: "https://admin.mistral.ai",
+    placeholder: "Paste Mistral API key",
+    // Mistral has no free tier — make the CTA honest so users don't
+    // create a key expecting free quota.
+    linkLabel: "Get a paid key",
   },
   "cloud-goclaw": {
     keyLabel: "Goclaw API Keys",
-    getKeyUrl: "https://goclaw.tikz2svg.com/api-keys",
+    getKeyUrl: "https://www.facebook.com/hiep.lequoc.31",
     placeholder: "Paste Goclaw API key (goclaw_…)",
   },
 };
@@ -263,9 +266,13 @@ export default function AgentsTab() {
                         href={cloud.getKeyUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void tauri.openExternal(cloud.getKeyUrl);
+                        }}
                         className="text-xs text-slate-500 hover:underline dark:text-slate-400"
                       >
-                        Get a free key <ExternalLink className="ml-0.5 inline size-3" />
+                        {cloud.linkLabel ?? "Get a free key"} <ExternalLink className="ml-0.5 inline size-3" />
                       </a>
                     </div>
                   )}

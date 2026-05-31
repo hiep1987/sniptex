@@ -93,6 +93,7 @@ export const tauri = {
     invoke<void>("show_window", { label }),
   hideWindow: (label: WindowLabel) =>
     invoke<void>("hide_window", { label }),
+  openExternal: (url: string) => invoke<void>("open_external", { url }),
 
   // Phase 7: SQLite history
   getHistory: (limit = 100) =>

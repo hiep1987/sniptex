@@ -121,7 +121,7 @@
     "targets": ["app", "dmg", "msi", "nsis"],
     "category": "Utility",
     "shortDescription": "Free OCR snip tool for LaTeX and Markdown",
-    "longDescription": "SnipTeX captures a screen region, sends it through your chosen OCR agent (Codex CLI / Gemini CLI / Gemini Vision API), and returns clean LaTeX or Markdown copied to your clipboard. Bring your own agent or API key.",
+    "longDescription": "SnipTeX captures a screen region, sends it through your chosen OCR agent (Codex CLI / Gemini CLI / Gemini API), and returns clean LaTeX or Markdown copied to your clipboard. Bring your own agent or API key.",
     "copyright": "Copyright (c) 2026 SnipTeX contributors",
     "resources": ["resources/test-api-key.png"],
     "icon": [

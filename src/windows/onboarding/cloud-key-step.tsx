@@ -3,18 +3,26 @@ import { ExternalLink, ShieldCheck } from "lucide-react";
 import { tauri } from "@/lib/invoke";
 import ApiKeyInput from "@/components/api-key-input";
 
-const PROVIDERS = [
+const PROVIDERS: Array<{
+  id: string;
+  label: string;
+  url: string;
+  urlLabel: string;
+  linkLabel?: string;
+}> = [
   {
     id: "gemini",
-    label: "Google Gemini Vision API",
-    url: "https://aistudio.google.com/apikey",
+    label: "Google Gemini API",
+    url: "https://aistudio.google.com/api-keys",
     urlLabel: "Google AI Studio",
   },
   {
     id: "mistral",
     label: "Mistral Vision API",
-    url: "https://console.mistral.ai/api-keys",
-    urlLabel: "Mistral Console",
+    url: "https://admin.mistral.ai",
+    urlLabel: "Mistral Admin",
+    // Mistral has no free tier — make the CTA honest.
+    linkLabel: "Get a paid key",
   },
 ];
 
@@ -85,9 +93,13 @@ export default function CloudKeyStep() {
                     href={p.url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void tauri.openExternal(p.url);
+                    }}
                     className="text-xs text-blue-600 hover:underline dark:text-blue-400"
                   >
-                    Get a free key <ExternalLink className="ml-0.5 inline size-3" />
+                    {p.linkLabel ?? "Get a free key"} <ExternalLink className="ml-0.5 inline size-3" />
                   </a>
                 </div>
               </div>
