@@ -17,7 +17,7 @@ fn cloud_model_constant_is_pinned() {
 
 #[test]
 fn rate_limited_maps_to_dispatch_rate_limited() {
-    let err: DispatchError = CloudGeminiError::RateLimited.into();
+    let err: DispatchError = CloudGeminiError::RateLimited("quota exhausted".into()).into();
     assert!(matches!(err, DispatchError::RateLimited));
 }
 

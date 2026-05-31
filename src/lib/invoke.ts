@@ -136,4 +136,8 @@ export const tauri = {
     invoke<void>("rebind_hotkey", { newShortcut }),
   setLaunchAtLogin: (enabled: boolean) =>
     invoke<void>("set_launch_at_login", { enabled }),
+
+  // Format conversion (Phase 9: Copy as TeX uses this to turn
+  // Markdown tables into \begin{tabular} blocks).
+  convertToTex: (text: string) => invoke<string>("convert_to_tex", { text }),
 };

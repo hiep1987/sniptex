@@ -52,6 +52,8 @@ pub enum DispatchError {
     EmptyOutput,
     #[error("rate limited")]
     RateLimited,
+    #[error("Codex workspace is out of credits. Refill credits or choose another agent.")]
+    CodexOutOfCredits,
     #[error("api auth failed (HTTP {0})")]
     AuthFailed(u16),
     #[error("bad request: {0}")]
@@ -253,6 +255,9 @@ async fn run_cli_agent(
 
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !output.status.success() {
+        if agent.spec.id == CODEX_ID && looks_like_codex_out_of_credits(&stderr) {
+            return Err(DispatchError::CodexOutOfCredits);
+        }
         if looks_like_rate_limit(&stderr) {
             return Err(DispatchError::RateLimited);
         }
@@ -469,6 +474,13 @@ fn looks_like_rate_limit(stderr: &str) -> bool {
             || lower.contains("error"))
 }
 
+fn looks_like_codex_out_of_credits(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    lower.contains("out of credits")
+        || (lower.contains("workspace") && lower.contains("refill"))
+        || (lower.contains("credits") && lower.contains("refill"))
+}
+
 fn staging_path(file_name: &str) -> PathBuf {
     std::env::temp_dir().join("sniptex").join(file_name)
 }
@@ -545,5 +557,17 @@ mod tests {
     fn rate_limit_detects_429_with_context() {
         assert!(looks_like_rate_limit("HTTP error 429: please retry"));
         assert!(looks_like_rate_limit("rate exceeded (429)"));
+    }
+
+    #[test]
+    fn codex_out_of_credits_detects_workspace_billing_error() {
+        let stderr = "ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.";
+        assert!(looks_like_codex_out_of_credits(stderr));
+    }
+
+    #[test]
+    fn codex_out_of_credits_ignores_generic_credit_words() {
+        assert!(!looks_like_codex_out_of_credits("credit card form failed"));
+        assert!(!looks_like_codex_out_of_credits("rate limited"));
     }
 }

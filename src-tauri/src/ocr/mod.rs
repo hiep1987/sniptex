@@ -4,6 +4,8 @@ pub mod pdf_render;
 pub mod postprocess;
 pub mod prompt;
 pub mod smart_format;
+pub mod tabular;
+mod tabular_complex_grid;
 
 pub use consistency::validate_rerun_consistency;
 pub use dispatcher::{
@@ -13,3 +15,4 @@ pub use dispatcher::{
 pub use postprocess::post_process;
 pub use prompt::MASTER_PROMPT;
 pub use smart_format::{detect_type, DetectedType};
+pub use tabular::markdown_tables_to_latex_tabular;

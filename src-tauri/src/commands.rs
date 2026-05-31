@@ -1447,18 +1447,29 @@ fn format_export(text: &str, format: &ExportFormat) -> String {
     match format {
         ExportFormat::Plain => text.to_string(),
         ExportFormat::Markdown => text.to_string(),
-        // Wrap raw output in a `$$ … $$` block when it looks like a
-        // bare LaTeX expression so it pastes cleanly into a .tex file.
-        // Phase 9 will replace this stub with the proper Format Toggle
-        // (Markdown ↔ tabular ↔ raw LaTeX).
+        // LaTeX export: convert any embedded Markdown tables to
+        // `\begin{tabular}` (shared with the Preview "Copy as TeX"
+        // path via `convert_to_tex`). For bare equations without
+        // tables, wrap in a `$$…$$` block so the paste lands as a
+        // valid display-math chunk inside a `.tex` file.
         ExportFormat::Latex => {
-            if text.contains("\\begin{") || text.contains("$$") {
-                text.to_string()
+            let converted = ocr::markdown_tables_to_latex_tabular(text);
+            if converted.contains("\\begin{") || converted.contains("$$") {
+                converted
             } else {
-                format!("$$\n{}\n$$", text.trim())
+                format!("$$\n{}\n$$", converted.trim())
             }
         }
     }
+}
+
+/// Convert agent output (Markdown with optional `$…$` math) to a
+/// LaTeX-friendly form: Markdown tables become `\begin{tabular}`
+/// blocks; everything else passes through untouched. Called from the
+/// Preview Window's "Copy as TeX" branch in `src/lib/format.ts`.
+#[tauri::command]
+pub fn convert_to_tex(text: String) -> String {
+    ocr::markdown_tables_to_latex_tabular(&text)
 }
 
 // -----------------------------------------------------------------------

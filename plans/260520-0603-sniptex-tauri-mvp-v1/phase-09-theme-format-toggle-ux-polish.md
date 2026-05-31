@@ -1,11 +1,13 @@
 ---
 phase: 9
 title: "Theme & Format Toggle & UX Polish"
-status: pending
+status: in-progress
 priority: P2
 effort: "3d"
 dependencies: [8]
 ---
+
+> **Partial ship 2026-05-31:** LaTeX `tabular` slice landed first (closes user-reported "Copy as TeX = Markdown" bug on table snips). Complex-grid reconstruction for flattened `cloud-mistral` OCR tables also landed. Theme switch / sounds / animations / Toast / queueing still pending.
 
 # Phase 9: Theme & Format Toggle & UX Polish
 
@@ -20,6 +22,7 @@ Implement system/light/dark theme switching, the format toggle (Smart/Inline/Dis
 - Theme: CSS variables + Tailwind dark mode class strategy; Tauri window background must also update (via `set_background_color` or transparent + CSS).
 - Format toggle: output format selection in Preview Window's "Copy as..." menu AND Settings → Formats tab (Phase 8 wires the schema, this phase implements the conversion logic).
 - LaTeX tabular mode: post-process Markdown tables into `\begin{tabular}{...}...\end{tabular}`. Requires a dedicated validation pass on the 9 TABLE_ONLY fixtures from Phase 1.
+- `cloud-mistral` uses Mistral OCR API (`mistral-ocr-latest` / dashboard `mistral-ocr-2512`), not prompt-controlled chat completion. Complex-grid quality therefore lives in deterministic Markdown-to-TeX reconstruction, not prompt tuning.
 - Sound: short success chime on clipboard copy; respect `sound_on_success` setting from Phase 8.
 - Animations: preview window fade-in/out, tray icon state transitions.
 
@@ -86,6 +89,7 @@ Tauri: window.set_background_color() for native frame
 
 - Create: `src-tauri/src/ocr/format_converter.rs` — all format conversion functions
 - Create: `src-tauri/src/ocr/tabular.rs` — Markdown table → LaTeX tabular converter
+- Create: `src-tauri/src/ocr/tabular_complex_grid.rs` — reconstruct flattened merged-header tables from OCR Markdown
 - Modify: `src-tauri/src/ocr/mod.rs` — re-export new modules
 - Modify: `src-tauri/src/commands.rs` — `convert_format(raw, detected_type, target)` command
 - Create: `src/components/ThemeProvider.tsx` — theme context + class toggling
@@ -113,9 +117,10 @@ Tauri: window.set_background_color() for native frame
 ## Todo List
 
 - [ ] Implement format_converter.rs (7 format variants)
-- [ ] Implement tabular.rs (Markdown → LaTeX tabular)
-- [ ] Wire convert_format Tauri command
-- [ ] Validate tabular conversion against 9 TABLE_ONLY fixtures
+- [x] Implement tabular.rs (Markdown → LaTeX tabular) — `src-tauri/src/ocr/tabular.rs`; 8 unit tests incl. câu 7 price-table fixture
+- [x] Reconstruct flattened complex-grid table output from `cloud-mistral` OCR API — `src-tauri/src/ocr/tabular_complex_grid.rs`; integration tests cover live `cloud-mistral`, `cloud-gemini`, `cloud-goclaw`, and `gemini-cli` shapes for the "Nhóm / Loại I / Loại II" fixture
+- [x] Wire `convert_to_tex` Tauri command (slice of original `convert_format`) — registered in `lib.rs`, called from `src/lib/format.ts` `case "tex"`; `export_record` LaTeX branch now reuses the same converter
+- [ ] Validate tabular conversion against 9 TABLE_ONLY fixtures (manual sweep pending; 1/9 covered by câu 7 test + complex merged-header fixture covered by 4-agent integration tests)
 - [ ] Build ThemeProvider + CSS variable system
 - [ ] Wire theme to all windows (main, preview, settings, history)
 - [ ] Add success sound playback with setting toggle

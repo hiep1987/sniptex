@@ -79,6 +79,10 @@ name = "ocr_smart_format"
 path = "tests/rust/ocr_smart_format_test.rs"
 
 [[test]]
+name = "ocr_tabular"
+path = "tests/rust/ocr_tabular_test.rs"
+
+[[test]]
 name = "cloud_gemini_api"
 path = "tests/rust/cloud_gemini_api_test.rs"
 

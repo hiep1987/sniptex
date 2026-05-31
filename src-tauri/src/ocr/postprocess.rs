@@ -98,11 +98,55 @@ fn hspace_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\\hspace\{[^}]*\}").unwrap())
 }
 
-fn tabular_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?s)\\begin\{tabular\}\{[^}]*\}(.*?)\\end\{tabular\}").unwrap()
-    })
+/// Locate every OUTERMOST `\begin{tabular}{…} … \end{tabular}` block,
+/// balancing nested tabulars so headers like
+/// `\multirow{2}{*}{\begin{tabular}{c}line1\\line2\end{tabular}}` are
+/// returned as a single span. Returns `(span_start, span_end,
+/// body_start, body_end)` byte ranges into `text`.
+fn find_outermost_tabulars(text: &str) -> Vec<(usize, usize, usize, usize)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        let Some(start_rel) = text[i..].find("\\begin{tabular}") else { break };
+        let span_start = i + start_rel;
+        // Skip past the column spec `{...}` that follows.
+        let after_begin = span_start + "\\begin{tabular}".len();
+        let Some(spec_end_rel) = text[after_begin..].find('}') else { break };
+        let body_start = after_begin + spec_end_rel + 1;
+        // Walk forward, tracking nested \begin{tabular} depth.
+        let mut depth = 1usize;
+        let mut cursor = body_start;
+        let mut span_end = None;
+        while cursor < bytes.len() {
+            let next_begin = text[cursor..].find("\\begin{tabular}");
+            let next_end = text[cursor..].find("\\end{tabular}");
+            match (next_begin, next_end) {
+                (Some(b), Some(e)) if b < e => {
+                    depth += 1;
+                    cursor += b + "\\begin{tabular}".len();
+                }
+                (_, Some(e)) => {
+                    depth -= 1;
+                    let end_marker_start = cursor + e;
+                    cursor = end_marker_start + "\\end{tabular}".len();
+                    if depth == 0 {
+                        let body_end = end_marker_start;
+                        span_end = Some(cursor);
+                        out.push((span_start, cursor, body_start, body_end));
+                        let _ = body_end;
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        match span_end {
+            Some(end) => i = end,
+            None => break, // unbalanced — leave the rest alone
+        }
+    }
+    out
 }
 
 fn enumerate_re() -> &'static Regex {
@@ -120,29 +164,52 @@ fn multicols_re() -> &'static Regex {
 }
 
 fn normalize_latex_to_markdown(raw: &str) -> String {
+    // Walk outermost tabular blocks (balanced — nested
+    // `\begin{tabular}` inside `\multirow`/`\multicolumn` headers are
+    // included in the parent block, not treated as separate tables).
+    // Tables carrying merged cells (\multirow, \multicolumn, \cline)
+    // anywhere in the balanced body MUST round-trip as raw LaTeX so
+    // the Copy-as-TeX path preserves the structural information — MD
+    // has no syntax for cell spans. See `ocr/prompt.rs` TABLE_ONLY
+    // "complex grid" branch.
+    let spans = find_outermost_tabulars(raw);
+    let mut s = String::with_capacity(raw.len());
+    let mut cursor = 0;
+    for (span_start, span_end, body_start, body_end) in spans {
+        // Normalise the prose between previous span and this one.
+        s.push_str(&normalize_outside_tabular(&raw[cursor..span_start]));
+        let body = &raw[body_start..body_end];
+        if body.contains("\\multirow")
+            || body.contains("\\multicolumn")
+            || body.contains("\\cline")
+        {
+            s.push_str(&raw[span_start..span_end]); // preserve verbatim
+        } else {
+            s.push_str(&latex_tabular_to_md_table(body));
+        }
+        cursor = span_end;
+    }
+    s.push_str(&normalize_outside_tabular(&raw[cursor..]));
+    s
+}
+
+/// Normalisations that apply to text OUTSIDE balanced tabular spans:
+/// `\textbf`, `\textit`, `\hspace`, `\par`, `\begin{enumerate}` /
+/// `\begin{multicols}`, bare `\\` line breaks, `\begin{center}` wrappers.
+/// Tabular spans are preserved/converted separately by the caller.
+fn normalize_outside_tabular(raw: &str) -> String {
     let mut s = raw.to_string();
-
-    s = tabular_re()
-        .replace_all(&s, |caps: &regex::Captures| {
-            latex_tabular_to_md_table(&caps[1])
-        })
-        .to_string();
-
     s = enumerate_re()
-        .replace_all(&s, |caps: &regex::Captures| {
-            latex_enumerate_to_md(&caps[1])
-        })
+        .replace_all(&s, |caps: &regex::Captures| latex_enumerate_to_md(&caps[1]))
         .to_string();
-
     s = multicols_re().replace_all(&s, "$1").to_string();
-
     s = textbf_re().replace_all(&s, "**$1**").to_string();
     s = textit_re().replace_all(&s, "*$1*").to_string();
     s = hspace_re().replace_all(&s, " ").to_string();
+    s = s.replace("\\\\", "\n");
     s = s.replace("\\par", "\n\n");
     s = s.replace("\\begin{center}", "");
     s = s.replace("\\end{center}", "");
-    s = s.replace("\\\\", "\n");
     s
 }
 
@@ -189,6 +256,26 @@ fn latex_tabular_to_md_table(body: &str) -> String {
     md_rows.join("\n")
 }
 
+fn strip_gemini_cli_infra_lines(s: &str) -> String {
+    let mut lines = s.lines();
+    let mut consumed = 0usize;
+    for line in lines.by_ref() {
+        let t = line.trim();
+        let is_infra = t.starts_with("Ripgrep is not available")
+            || t.starts_with("YOLO mode is enabled")
+            || t.starts_with("Approval mode overridden")
+            || t.starts_with("Loaded cached credentials")
+            || t.starts_with("Data collection is")
+            || (t.is_empty() && consumed > 0);
+        if is_infra {
+            consumed += line.len() + 1; // +1 for the newline we just consumed
+        } else {
+            break;
+        }
+    }
+    s[consumed.min(s.len())..].to_string()
+}
+
 fn decode_html_entities(s: &str) -> String {
     s.replace("&lt;", "<")
         .replace("&gt;", ">")
@@ -204,6 +291,13 @@ pub fn post_process(raw: &str) -> String {
     if s.contains("&lt;") || s.contains("&gt;") || s.contains("&amp;") {
         s = decode_html_entities(&s);
     }
+
+    // 0a-bis. Gemini CLI infra noise: harmless leading status lines
+    // ("Ripgrep is not available. Falling back to GrepTool.", "YOLO
+    // mode is enabled.", workspace-trust warnings) leak into stdout
+    // before the OCR body. They're never part of the OCR output, so
+    // strip every contiguous leading line that matches.
+    s = strip_gemini_cli_infra_lines(&s);
 
     // 0b. Strip thinking/reasoning transcripts (Gemini CLI).
     s = strip_thinking_transcript(&s);
@@ -367,6 +461,62 @@ mod tests {
         assert!(!result.contains("\\begin"), "raw latex leaked: {result}");
         assert!(!result.contains("\\item"), "raw item leaked: {result}");
         assert!(!result.contains("\\end"), "raw end leaked: {result}");
+    }
+
+    #[test]
+    fn preserves_tabular_with_multirow_and_multicolumn() {
+        // From the user's "Nhóm / Loại I / Loại II" fixture: header
+        // "Nhóm" spans 2 rows, "Số máy trong từng nhóm…" spans 2
+        // columns. Postprocess MUST NOT flatten this to a MD grid.
+        let input = "\\begin{tabular}{|c|c|c|c|}\n\\hline \\multirow{2}{*}{ Nhóm } & \\multirow{2}{*}{Số máy mỗi nhóm} & \\multicolumn{2}{|c|}{Số máy trong từng nhóm} \\\\\n\\cline { 3 - 4 } & & Loại I & Loại II \\\\\n\\hline$A$ & 10 & 2 & 2 \\\\\n\\hline\n\\end{tabular}";
+        let result = post_process(input);
+        assert!(result.contains("\\multirow{2}{*}{ Nhóm }"), "multirow lost: {result}");
+        assert!(result.contains("\\multicolumn{2}{|c|}"), "multicolumn lost: {result}");
+        assert!(result.contains("\\cline"), "cline lost: {result}");
+        assert!(result.contains("\\begin{tabular}"), "tabular env lost: {result}");
+        assert!(!result.contains("| Nhóm |"), "should not have flattened to MD: {result}");
+    }
+
+    #[test]
+    fn strips_gemini_cli_ripgrep_and_yolo_lines() {
+        let input = "Ripgrep is not available. Falling back to GrepTool.\nYOLO mode is enabled. All tool calls will be automatically approved.\n\n| a | b |\n|---|---|\n| 1 | 2 |";
+        let result = post_process(input);
+        assert!(result.starts_with("| a | b |"), "infra lines leaked: {result}");
+        assert!(!result.contains("Ripgrep"), "ripgrep leak: {result}");
+        assert!(!result.contains("YOLO"), "yolo leak: {result}");
+    }
+
+    #[test]
+    fn preserves_nested_tabular_inside_multirow_header() {
+        // Real Codex output for the user's "Nhóm / Loại I / Loại II"
+        // image: outer tabular has merged cells AND its headers
+        // contain nested `\begin{tabular}{c}line1\\line2\end{tabular}`
+        // for forced line breaks. The inner nested tabular has no
+        // merge markers — naive non-greedy regex matching would flatten
+        // it to MD and corrupt the header. Balanced-scan must keep
+        // the outer span intact.
+        let input = "\\begin{tabular}{|c|c|c|c|}\n\\hline\n\\multirow{2}{*}{Nhóm} & \\multirow{2}{*}{\\begin{tabular}{c}Số máy mỗi\\\\nhóm\\end{tabular}} & \\multicolumn{2}{|c|}{\\begin{tabular}{c}Số máy trong từng nhóm\\\\để sản xuất một đơn vị sản phẩm\\end{tabular}} \\\\\n\\cline{3-4}\n & & Loại I & Loại II \\\\\n\\hline\nA & 10 & 2 & 2 \\\\\n\\hline\n\\end{tabular}";
+        let result = post_process(input);
+        // Inner nested tabulars MUST survive — flattening them would
+        // corrupt the multirow/multicolumn header arguments.
+        let inner_count = result.matches("\\begin{tabular}{c}").count();
+        assert_eq!(inner_count, 2, "lost nested tabulars: {result}");
+        assert!(result.contains("\\multirow{2}{*}{\\begin{tabular}{c}Số máy mỗi"), "multirow header mangled: {result}");
+        assert!(result.contains("\\multicolumn{2}{|c|}{\\begin{tabular}{c}Số máy trong"), "multicolumn header mangled: {result}");
+        // Must NOT contain the flatten artefacts of latex_tabular_to_md_table.
+        assert!(!result.contains("| Số máy trong từng nhóm |"), "inner tabular got flattened: {result}");
+    }
+
+    #[test]
+    fn still_flattens_simple_tabular_to_markdown() {
+        // Regression guard: the existing simple-grid LaTeX → MD path
+        // (used when an agent ignores the prompt and emits raw LaTeX
+        // for a non-merged table) must keep working.
+        let input = "\\begin{tabular}{|l|c|c|}\n\\hline\nName & A & B \\\\\\hline\nRow1 & 1 & 2 \\\\\\hline\n\\end{tabular}";
+        let result = post_process(input);
+        assert!(result.contains("| Name |"), "did not flatten: {result}");
+        assert!(result.contains("| --- |"), "no separator: {result}");
+        assert!(!result.contains("\\begin{tabular}"), "raw latex leaked: {result}");
     }
 
     #[test]

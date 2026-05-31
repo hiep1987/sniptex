@@ -1,10 +1,11 @@
 ---
 phase: 8
 title: "Settings UI & Onboarding Flow"
-status: pending
+status: complete
 priority: P2
 effort: "2d"
 dependencies: [7]
+completed: "2026-05-31"
 ---
 
 # Phase 8: Settings UI & Onboarding Flow
@@ -126,18 +127,18 @@ pub struct AppSettings {
 
 ## Todo List
 
-- [ ] Define `AppSettings` schema (Rust + TS mirror)
-- [ ] Wire `tauri-plugin-store` + `tauri-plugin-autostart`
-- [ ] Implement get/update/rebind/autostart commands
-- [ ] Build settingsStore.ts with reactive updates
-- [ ] Build 5 settings tabs (General/Agents/Hotkeys/Formats/About) — AgentsTab covers all 4 agent paths (Codex, Gemini CLI, Cloud Gemini, Cloud Mistral)
-- [ ] Build HotkeyInput component with capture + conflict detection
-- [ ] Build ApiKeyInput component (password-style, paste, reveal toggle, test button)
-- [ ] Build 6 onboarding steps with platform-aware install guide + CloudKeyStep
-- [ ] First-run detection routes to onboarding
-- [ ] Verify hotkey rebind end-to-end
-- [ ] Verify launch-at-login on Mac
-- [ ] Verify onboarding flow on fresh install
+- [x] Define `AppSettings` schema (Rust + TS mirror) — `src-tauri/src/settings.rs`, `src/stores/settings-store.ts`
+- [x] Wire `tauri-plugin-store` + `tauri-plugin-autostart`
+- [x] Implement get/update/rebind/autostart commands — `commands.rs` (`get_settings`, `update_settings`, `rebind_hotkey`, `set_launch_at_login`)
+- [x] Build settingsStore.ts with reactive updates
+- [x] Build 5 settings tabs (General/Agents/Hotkeys/Formats/About) — AgentsTab now covers 5 agent paths (Codex, Gemini CLI, Cloud Gemini, Cloud Mistral, Cloud Goclaw)
+- [x] Build HotkeyInput component with capture + conflict detection — `src/components/hotkey-input.tsx`
+- [x] Build ApiKeyInput component (password-style, paste, reveal toggle, test button) — `src/components/api-key-input.tsx`; live OCR validation added in commit 9da1515
+- [x] Build onboarding steps with platform-aware install guide + CloudKeyStep — shipped as 5 steps (Welcome / Install / CloudKey / Hotkey / Ready); Detect merged into Welcome+Install
+- [x] First-run detection routes to onboarding — `src-tauri/src/lib.rs:80-92` (`onboarding_completed` gate)
+- [ ] Verify hotkey rebind end-to-end (manual smoke pending)
+- [ ] Verify launch-at-login on Mac (manual smoke pending)
+- [ ] Verify onboarding flow on fresh install (manual smoke pending)
 
 ## Success Criteria
 

@@ -56,11 +56,33 @@ If EQUATION_ONLY:
   Example: \int_0^1 x^2 \, dx = \frac{1}{3}
 
 If TABLE_ONLY:
-  Output GitHub Markdown table.
-  Example: | a | b |
+  Decide between two sub-formats based on the visual structure:
+
+  SIMPLE GRID (no merged cells, no header hierarchy, no row/column spans):
+    Output GitHub Markdown table.
+    Example: | a | b |
 |---|---|
 | 1 | 2 |
-  Inside table cells: only wrap mathematical variables, fractions, equations, and symbolic expressions in $...$. Plain numeric intervals like [40; 45), plain integers, plain percentages (15%), and ordinary words MUST remain unwrapped.
+    Inside table cells: only wrap mathematical variables, fractions, equations, and symbolic expressions in $...$. Plain numeric intervals like [40; 45), plain integers, plain percentages (15%), and ordinary words MUST remain unwrapped.
+
+  COMPLEX GRID (any merged cells — rowspan, colspan, multi-tier headers, cells that span vertically or horizontally):
+    Output raw LaTeX tabular directly, NOT Markdown. GitHub Markdown cannot express merged cells; emitting a flattened MD grid would lose structural information.
+    Use:
+      - \\begin{tabular}{|c|c|...|} ... \\end{tabular} with a column count matching the bottom-most (most-divided) header row.
+      - \\multirow{N}{*}{content} for cells that span N rows vertically.
+      - \\multicolumn{N}{|c|}{content} for cells that span N columns horizontally.
+      - \\cline{a-b} after a row when only columns a through b have a horizontal rule (used under a multicolumn header).
+      - \\hline between full-width row separators.
+      - Do NOT wrap cell contents in $...$ unless the cell genuinely contains math. Plain header text, plain integers, plain labels stay unwrapped.
+    Example (header "Group" spans 2 rows, header "Counts" spans 2 columns over "Type I" and "Type II"):
+\\begin{tabular}{|c|c|c|}
+\\hline
+\\multirow{2}{*}{Group} & \\multicolumn{2}{|c|}{Counts} \\\\
+\\cline{2-3} & Type I & Type II \\\\
+\\hline
+A & 1 & 2 \\\\
+\\hline
+\\end{tabular}
 
 If MIXED:
   Output Markdown.

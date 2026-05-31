@@ -1,7 +1,4 @@
-// Output-format conversions for the "Copy as…" menu. Phase 9 owns the
-// full Format Toggle UX; this module supplies the scaffolding so the
-// Preview Window can already offer inline/display/plain/markdown
-// variants on day one.
+// Output-format conversions for the "Copy as…" menu.
 //
 // The OCR pipeline returns text already shaped by the master prompt
 // (see `src-tauri/src/ocr/prompt.rs`):
@@ -11,7 +8,7 @@
 //
 // Conversions therefore operate on the master-prompt convention.
 
-import type { DetectedType } from "./invoke";
+import { tauri, type DetectedType } from "./invoke";
 
 // Export modes the user can pick from "Copy as…". Kept intentionally
 // small so every entry has a *meaningful* transformation today; the
@@ -52,12 +49,20 @@ export async function formatOutput(
     case "raw":
       return text;
     case "tex":
-      // The OCR master prompt emits paste-ready LaTeX already (no outer
-      // delimiters for EQUATION_ONLY; `$…$` / `$$…$$` inside Markdown
-      // for TABLE/MIXED). Returning verbatim is the honest behaviour
-      // until Phase 9 adds the `\begin{tabular}` toggle that would
-      // make TeX meaningfully different from Markdown for tables.
-      return text;
+      // EQUATION_ONLY: master prompt emits paste-ready LaTeX already,
+      // nothing to convert. TABLE_ONLY / MIXED: flip GitHub Markdown
+      // tables to `\begin{tabular}` so the paste lands cleanly in a
+      // `.tex` file. Inline `$…$` math passes through untouched.
+      if (detected === "EQUATION_ONLY") return text;
+      try {
+        return await tauri.convertToTex(text);
+      } catch (err) {
+        // Backend conversion is best-effort; fall back to the raw
+        // Markdown so the user always gets *something* on the
+        // clipboard rather than a silent failure.
+        console.warn("[format] convert_to_tex failed, falling back", err);
+        return text;
+      }
     case "plain":
       return toPlain(text);
     case "markdown":

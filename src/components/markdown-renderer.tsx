@@ -43,11 +43,33 @@ async function ensureKatexStyles() {
   stylesMounted = true;
 }
 
+// Tables with merged cells round-trip as raw LaTeX `\begin{tabular}`
+// (see `src-tauri/src/ocr/postprocess.rs` complex-table gate). The
+// preview's markdown-it + KaTeX pipeline can't render `\multirow` /
+// `\multicolumn` natively, so wrap such blocks in a fenced code block
+// — honest "this is what will land on your clipboard" preview that
+// also stops markdown-it from mangling the backslashes as text.
+const COMPLEX_TABULAR_RE =
+  /\\begin\{tabular\}\{[^}]*\}[\s\S]*?\\end\{tabular\}/g;
+
+function fenceComplexTabulars(text: string): string {
+  return text.replace(COMPLEX_TABULAR_RE, (block) => {
+    if (
+      block.includes("\\multirow") ||
+      block.includes("\\multicolumn") ||
+      block.includes("\\cline")
+    ) {
+      return `\n\n\`\`\`latex\n${block}\n\`\`\`\n\n`;
+    }
+    return block;
+  });
+}
+
 export function MarkdownRenderer({ source }: Props) {
   const [html, setHtml] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  const trimmed = useMemo(() => source.trim(), [source]);
+  const trimmed = useMemo(() => fenceComplexTabulars(source.trim()), [source]);
 
   useEffect(() => {
     let cancelled = false;
