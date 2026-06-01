@@ -6,8 +6,12 @@
 //! comparable across CLI sweeps.
 //!
 //! Also mirrored in the Goclaw cloud agent's skill file:
-//! `bot-tex/skills-store/tex-ocr/1/SKILL.md` (deployed to VPS volume
-//! `/var/lib/docker/volumes/goclaw_goclaw-data/_data/skills-store/tex-ocr/1/SKILL.md`).
+//! `bot-tex/skills-store/tex-ocr/1/SKILL.md` (source of truth in git;
+//! runtime path on VPS is the volume `/var/lib/docker/volumes/
+//! goclaw_goclaw-data/_data/skills-store/tex-ocr/4/SKILL.md` — Goclaw
+//! resolves agentId `tex-ocr` to skill subdir `4` server-side, verified
+//! 2026-06-01 from container logs `path=/app/data/skills-store/tex-ocr/4/
+//! SKILL.md`). When deploying, scp the local file onto the `/4/` path.
 //! Edits to classification, format branches, or strict rules below must be
 //! propagated to that SKILL.md (body) and its frontmatter `description`.
 //!
