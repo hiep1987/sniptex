@@ -5,7 +5,7 @@ const FORMATS: { value: OutputFormat; label: string; desc: string }[] = [
   { value: "smart", label: "Smart", desc: "Auto-detect equation vs table vs mixed" },
   { value: "inline", label: "Inline LaTeX", desc: "Wrap in $…$" },
   { value: "display", label: "Display LaTeX", desc: "Wrap in $$…$$" },
-  { value: "plain", label: "Plain text", desc: "No wrapping" },
+  { value: "plain", label: "Plain LaTeX", desc: "Raw TeX / tabular, no delimiters" },
   { value: "markdown", label: "Markdown", desc: "Markdown with math fences" },
   { value: "math_ml", label: "MathML", desc: "XML math markup" },
   { value: "unicode_pretty", label: "Unicode", desc: "Unicode math symbols" },

@@ -8,28 +8,38 @@
 //
 // Conversions therefore operate on the master-prompt convention.
 
-import { tauri, type DetectedType } from "./invoke";
-
-// Export modes the user can pick from "Copy as…". Kept intentionally
-// small so every entry has a *meaningful* transformation today; the
-// upstream OCR agent (Codex / Gemini) already decides inline vs
-// display vs Markdown-mixed semantics, so we don't expose redundant
-// delimiter-only variants until Phase 9 wires real conversion.
-export type FormatKind = "raw" | "tex" | "plain" | "markdown" | "mathml";
+import { tauri, type DetectedType, type OutputFormat } from "./invoke";
 
 export type FormatOption = {
-  kind: FormatKind;
+  kind: OutputFormat;
   label: string;
 };
 
+const FORMAT_LABELS: Record<OutputFormat, string> = {
+  smart: "Smart",
+  inline: "Inline LaTeX",
+  display: "Display LaTeX",
+  plain: "Plain LaTeX",
+  markdown: "Markdown",
+  math_ml: "MathML",
+  unicode_pretty: "Unicode",
+};
+
 /**
- * Choose a sensible default copy format for the given detected type.
- * Equation-only snips ship as TeX (paste-into-.tex friendly);
- * everything else flows through as Markdown.
+ * Resolve the Smart setting to the master-prompt-native output for the
+ * detected type: equations are already raw TeX, tables/mixed are Markdown.
  */
-export function defaultFormatFor(detected: DetectedType | null): FormatKind {
-  if (detected === "EQUATION_ONLY") return "tex";
+export function defaultFormatFor(detected: DetectedType | null): OutputFormat {
+  if (detected === "EQUATION_ONLY") return "plain";
   return "markdown";
+}
+
+export function labelForFormat(kind: OutputFormat): string {
+  return FORMAT_LABELS[kind];
+}
+
+export function copyAsOptions(kinds: OutputFormat[]): FormatOption[] {
+  return kinds.map((kind) => ({ kind, label: labelForFormat(kind) }));
 }
 
 /**
@@ -43,36 +53,45 @@ export function defaultFormatFor(detected: DetectedType | null): FormatKind {
 export async function formatOutput(
   text: string,
   detected: DetectedType | null,
-  kind: FormatKind,
+  kind: OutputFormat,
 ): Promise<string> {
+  const resolved = kind === "smart" ? defaultFormatFor(detected) : kind;
   switch (kind) {
-    case "raw":
-      return text;
-    case "tex":
-      // EQUATION_ONLY: master prompt emits paste-ready LaTeX already,
-      // nothing to convert. TABLE_ONLY / MIXED: flip GitHub Markdown
-      // tables to `\begin{tabular}` so the paste lands cleanly in a
-      // `.tex` file. Inline `$…$` math passes through untouched.
-      if (detected === "EQUATION_ONLY") return text;
-      try {
-        return await tauri.convertToTex(text);
-      } catch (err) {
-        // Backend conversion is best-effort; fall back to the raw
-        // Markdown so the user always gets *something* on the
-        // clipboard rather than a silent failure.
-        console.warn("[format] convert_to_tex failed, falling back", err);
-        return text;
-      }
+    case "smart":
+      return formatOutput(text, detected, resolved);
+    case "inline":
+      if (detected !== "EQUATION_ONLY") return text;
+      return `$${stripOuterMathDelimiters(text)}$`;
+    case "display":
+      if (detected !== "EQUATION_ONLY") return text;
+      return `$$\n${stripOuterMathDelimiters(text)}\n$$`;
     case "plain":
-      return toPlain(text);
+      if (detected === "EQUATION_ONLY") return stripOuterMathDelimiters(text);
+      return await markdownWithLatexTables(text);
     case "markdown":
+      if (detected === "EQUATION_ONLY") {
+        return `$$\n${stripOuterMathDelimiters(text)}\n$$`;
+      }
       return text;
-    case "mathml":
+    case "math_ml":
       return await toMathML(text, detected);
+    case "unicode_pretty":
+      return toUnicodePretty(text);
   }
 }
 
-function toPlain(text: string): string {
+function stripOuterMathDelimiters(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("$$") && trimmed.endsWith("$$")) {
+    return trimmed.slice(2, -2).trim();
+  }
+  if (trimmed.startsWith("$") && trimmed.endsWith("$")) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function toPlainText(text: string): string {
   // Strip the common LaTeX-math delimiters so users pasting into a
   // notes app get a readable approximation. Tables degrade to their
   // Markdown form minus the `$…$` wrappers.
@@ -80,6 +99,15 @@ function toPlain(text: string): string {
     .replace(/\$\$([\s\S]*?)\$\$/g, "$1")
     .replace(/\$([^$\n]+)\$/g, "$1")
     .trim();
+}
+
+async function markdownWithLatexTables(text: string): Promise<string> {
+  try {
+    return await tauri.convertToTex(text);
+  } catch (err) {
+    console.warn("[format] convert_to_tex failed, falling back", err);
+    return text;
+  }
 }
 
 async function toMathML(
@@ -92,7 +120,7 @@ async function toMathML(
   // top-level OutputJax. Phase 9 (Format Toggle scope) wires the full
   // pipeline; for now we surface a clearly-flagged fallback so the
   // menu item still does something useful instead of erroring.
-  if (detected !== "EQUATION_ONLY") return toPlain(text);
+  if (detected !== "EQUATION_ONLY") return toPlainText(text);
   const { mathjax } = await import("mathjax-full/js/mathjax.js");
   const { TeX } = await import("mathjax-full/js/input/tex.js");
   const { liteAdaptor } = await import(
@@ -121,10 +149,25 @@ async function toMathML(
   return visitor.visitTree(mathItem.root as never);
 }
 
-export const COPY_AS_OPTIONS: FormatOption[] = [
-  { kind: "raw", label: "Raw OCR text" },
-  { kind: "tex", label: "TeX" },
-  { kind: "plain", label: "Plain text" },
-  { kind: "markdown", label: "Markdown" },
-  { kind: "mathml", label: "MathML" },
-];
+function toUnicodePretty(text: string): string {
+  return toPlainText(text)
+    .replace(/\\alpha/g, "α")
+    .replace(/\\beta/g, "β")
+    .replace(/\\gamma/g, "γ")
+    .replace(/\\Delta/g, "Δ")
+    .replace(/\\delta/g, "δ")
+    .replace(/\\theta/g, "θ")
+    .replace(/\\lambda/g, "λ")
+    .replace(/\\mu/g, "μ")
+    .replace(/\\pi/g, "π")
+    .replace(/\\sigma/g, "σ")
+    .replace(/\\omega/g, "ω")
+    .replace(/\\infty/g, "∞")
+    .replace(/\\leq/g, "≤")
+    .replace(/\\geq/g, "≥")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\pm/g, "±")
+    .replace(/\\to/g, "→");
+}

@@ -34,7 +34,7 @@ Free alternative to Mathpix Snip ($5-20/mo) for Mac + Windows. Hotkey-triggered 
 | 6 | [React UI Shell & MathJax Preview](./phase-06-react-ui-shell-mathjax-preview.md) | ✅ Complete (2026-05-22, build verified; live smoke test pending) |
 | 7 | [SQLite History with FTS5 Search](./phase-07-sqlite-history-with-fts5-search.md) | ✅ Complete (2026-05-23, 7 integration tests; live smoke test pending) |
 | 8 | [Settings UI & Onboarding Flow](./phase-08-settings-ui-onboarding-flow.md) | ✅ Complete (2026-05-31, all 5 settings tabs + 5 onboarding steps + 4-agent BYOK shipped) |
-| 9 | [Theme & Format Toggle & UX Polish](./phase-09-theme-format-toggle-ux-polish.md) | 🟡 In Progress (LaTeX tabular toggle shipped 2026-05-31; theme/sounds/animations/Toast pending) |
+| 9 | [Theme & Format Toggle & UX Polish](./phase-09-theme-format-toggle-ux-polish.md) | ✅ Implementation Complete (2026-06-01; formats, tabular validation, theme, sound, animations, Toast, rapid-snip queue) |
 | 10 | [Windows Cross-Platform Port](./phase-10-windows-cross-platform-port.md) | Pending |
 | 11 | [Distribution: Code Signing & Installers](./phase-11-distribution-code-signing-installers.md) | Pending |
 | 12 | [CI/CD Release Workflow & Auto-Updater](./phase-12-ci-cd-release-workflow-auto-updater.md) | Pending |

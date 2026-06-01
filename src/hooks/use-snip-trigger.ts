@@ -21,13 +21,18 @@ import { useHotkeyStore } from "@/state/hotkey-store";
 export function useSnipTrigger() {
   const recordPress = useHotkeyStore((s) => s.recordPress);
   const inFlight = useRef(false);
+  const queued = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     const offs: UnlistenFn[] = [];
 
     const triggerSnip = async () => {
-      if (inFlight.current) return;
+      if (cancelled) return;
+      if (inFlight.current) {
+        queued.current = Math.min(queued.current + 1, 3);
+        return;
+      }
       inFlight.current = true;
       try {
         const result = await tauri.runSnip();
@@ -46,6 +51,10 @@ export function useSnipTrigger() {
         void notifySnipFailure(msg);
       } finally {
         inFlight.current = false;
+        if (!cancelled && queued.current > 0) {
+          queued.current -= 1;
+          window.setTimeout(() => void triggerSnip(), 0);
+        }
       }
     };
 
@@ -79,6 +88,7 @@ export function useSnipTrigger() {
 
     return () => {
       cancelled = true;
+      queued.current = 0;
       for (const off of offs) off();
     };
   }, [recordPress]);

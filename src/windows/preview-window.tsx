@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCurrentWebviewWindow,
   type WebviewWindow,
@@ -17,14 +17,20 @@ import {
 } from "lucide-react";
 import { LatexRenderer } from "@/components/latex-renderer";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
-import { COPY_AS_OPTIONS, defaultFormatFor, formatOutput, type FormatKind } from "@/lib/format";
+import {
+  copyAsOptions,
+  formatOutput,
+  labelForFormat,
+  type FormatOption,
+} from "@/lib/format";
+import { playSuccessSound } from "@/lib/success-sound";
 import { useAutoHide } from "@/hooks/use-auto-hide";
 import { useSnipResult } from "@/hooks/use-snip-result";
 import { useSnipTrigger } from "@/hooks/use-snip-trigger";
 import { useSettingsStore } from "@/stores/settings-store";
 import { cn } from "@/lib/cn";
 import { strings } from "@/strings";
-import type { DetectedType } from "@/lib/invoke";
+import type { DetectedType, OutputFormat } from "@/lib/invoke";
 
 // Preview window opens at a small offset from the cursor so the user
 // doesn't have to scan the full screen to find the result.
@@ -38,14 +44,39 @@ export default function PreviewWindow() {
   const event = useSnipResult();
   const snip = event?.result ?? null;
   const autoHideMs = useSettingsStore((s) => s.preview_duration_ms);
+  const defaultFormat = useSettingsStore((s) => s.default_format);
+  const copyAsFormats = useSettingsStore((s) => s.copy_as_formats);
+  const soundOnSuccess = useSettingsStore((s) => s.sound_on_success);
+  const copyOptions = useMemo(
+    () => copyAsOptions(copyAsFormats),
+    [copyAsFormats],
+  );
 
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const hideTimerRef = useRef<number | null>(null);
 
   const handleHide = useCallback(() => {
-    void hidePreviewWindow();
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    setClosing(true);
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setClosing(false);
+      void hidePreviewWindow();
+    }, 160);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
   }, []);
 
   // Only arm the auto-hide timer once a real snip has rendered.
@@ -54,6 +85,24 @@ export default function PreviewWindow() {
   // even visible — generating noisy permission errors and surprising
   // the user if the window were ever shown by other means.
   const hasResult = !!(snip && snip.status === "ok" && snip.text);
+
+  useEffect(() => {
+    if (hasResult) return;
+    let cancelled = false;
+    previewWindow()
+      .isVisible()
+      .then((visible) => {
+        if (!cancelled && visible) {
+          void hidePreviewWindow();
+        }
+      })
+      .catch((err) =>
+        console.warn("[preview] empty-state visibility check failed", err),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [hasResult]);
 
   const { bump } = useAutoHide({
     enabled: hasResult,
@@ -107,6 +156,10 @@ export default function PreviewWindow() {
     // sees that the snip completed. Subsequent work happens behind a
     // now-visible surface.
     void showPreviewNearCursor();
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
 
     setPinned(false);
     // Reset hovered: if the previous snip hid while mouse was over the
@@ -116,6 +169,7 @@ export default function PreviewWindow() {
     setHovered(false);
     setCopyState("idle");
     setMenuOpen(false);
+    setClosing(false);
 
     // History persistence happens entirely in Rust (`persist_to_history`
     // before the snip-complete event fires). HistoryWindow listens for
@@ -126,10 +180,11 @@ export default function PreviewWindow() {
     // Auto-copy the default format so the user can paste immediately
     // without needing to click anything. The visible window is a
     // confirmation, not the source of truth.
-    void copyOutput(snip.text, snip.detected, defaultFormatFor(snip.detected))
+    void copyOutput(snip.text, snip.detected, defaultFormat, soundOnSuccess)
       .then(() => setCopyState("copied"))
       .catch((err) => {
         console.warn("[preview] auto-copy failed", err);
+        toast.error("Copy failed", { description: String(err) });
       });
     // event.seq is the source of truth: identical snip text shouldn't
     // suppress the re-show.
@@ -144,22 +199,20 @@ export default function PreviewWindow() {
   }, []);
 
   if (!snip || snip.status !== "ok" || !snip.text) {
-    // First-run / cold-start state. The window starts hidden in
-    // tauri.conf.json, so this branch normally isn't seen.
-    return (
-      <main className="flex h-dvh w-dvw flex-col items-center justify-center bg-slate-900/85 px-6 text-center text-slate-100 backdrop-blur">
-        <h1 className="text-base font-semibold">{strings.preview.emptyTitle}</h1>
-        <p className="mt-1 text-xs text-slate-300">{strings.preview.emptyHint}</p>
-        <Toaster richColors closeButton position="bottom-right" />
-      </main>
-    );
+    // The preview window is an output surface only. If it is ever
+    // shown before a snip result exists, keep it visually empty and let
+    // the effect above hide it immediately instead of flashing a panel.
+    return <Toaster richColors closeButton position="bottom-right" />;
   }
 
   return (
     <main
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex h-dvh w-dvw flex-col overflow-hidden rounded-xl border border-slate-300/40 bg-white/95 text-slate-900 shadow-2xl backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/95 dark:text-slate-100"
+      className={cn(
+        "flex h-dvh w-dvw flex-col overflow-hidden rounded-xl border border-slate-300/40 bg-white/95 text-slate-900 shadow-2xl backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/95 dark:text-slate-100",
+        closing ? "sniptex-preview-exit" : "sniptex-preview-enter",
+      )}
     >
       <PreviewToolbar
         agent={snip.agent}
@@ -167,24 +220,34 @@ export default function PreviewWindow() {
         copyState={copyState}
         pinned={pinned}
         menuOpen={menuOpen}
+        copyOptions={copyOptions}
         onCopy={async () => {
           if (!snip.text) return;
-          await copyOutput(
-            snip.text,
-            snip.detected,
-            defaultFormatFor(snip.detected),
-          );
-          setCopyState("copied");
-          // Keep the window alive a moment longer so user sees the tick.
-          bump();
+          try {
+            await copyOutput(
+              snip.text,
+              snip.detected,
+              defaultFormat,
+              soundOnSuccess,
+            );
+            setCopyState("copied");
+            // Keep the window alive a moment longer so user sees the tick.
+            bump();
+          } catch (err) {
+            toast.error("Copy failed", { description: String(err) });
+          }
         }}
         onCopyAs={async (kind) => {
           if (!snip.text) return;
-          await copyOutput(snip.text, snip.detected, kind);
-          setCopyState("copied");
-          setMenuOpen(false);
-          bump();
-          toast.success(`Copied as ${kind}`);
+          try {
+            await copyOutput(snip.text, snip.detected, kind, soundOnSuccess);
+            setCopyState("copied");
+            setMenuOpen(false);
+            bump();
+            toast.success(`Copied as ${labelForFormat(kind)}`);
+          } catch (err) {
+            toast.error("Copy failed", { description: String(err) });
+          }
         }}
         onTogglePin={() => setPinned((p) => !p)}
         onToggleMenu={() => setMenuOpen((m) => !m)}
@@ -220,10 +283,11 @@ type ToolbarProps = {
   pinned: boolean;
   menuOpen: boolean;
   onCopy: () => void | Promise<void>;
-  onCopyAs: (kind: FormatKind) => void | Promise<void>;
+  onCopyAs: (kind: OutputFormat) => void | Promise<void>;
   onTogglePin: () => void;
   onToggleMenu: () => void;
   onDismiss: () => void;
+  copyOptions: FormatOption[];
 };
 
 function PreviewToolbar({
@@ -237,6 +301,7 @@ function PreviewToolbar({
   onTogglePin,
   onToggleMenu,
   onDismiss,
+  copyOptions,
 }: ToolbarProps) {
   const detectedLabel = useMemo(() => {
     if (!detected) return "—";
@@ -307,7 +372,7 @@ function PreviewToolbar({
         </button>
         {menuOpen && (
           <ul className="absolute right-0 z-10 mt-1 w-56 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            {COPY_AS_OPTIONS.map((opt) => (
+            {copyOptions.map((opt) => (
               <li key={opt.kind}>
                 <button
                   type="button"
@@ -354,10 +419,12 @@ function PreviewToolbar({
 async function copyOutput(
   text: string,
   detected: DetectedType | null,
-  kind: FormatKind,
+  kind: OutputFormat,
+  soundEnabled: boolean,
 ): Promise<void> {
   const formatted = await formatOutput(text, detected, kind);
   await writeText(formatted);
+  await playSuccessSound(soundEnabled);
 }
 
 let cachedWindow: WebviewWindow | null = null;
