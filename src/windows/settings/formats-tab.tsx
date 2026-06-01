@@ -1,11 +1,12 @@
 import { useSettingsStore, type OutputFormat } from "@/stores/settings-store";
+import { sortFormats } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 const FORMATS: { value: OutputFormat; label: string; desc: string }[] = [
+  { value: "plain", label: "Plain LaTeX", desc: "Raw TeX / tabular, no delimiters" },
   { value: "smart", label: "Smart", desc: "Auto-detect equation vs table vs mixed" },
   { value: "inline", label: "Inline LaTeX", desc: "Wrap in $…$" },
   { value: "display", label: "Display LaTeX", desc: "Wrap in $$…$$" },
-  { value: "plain", label: "Plain LaTeX", desc: "Raw TeX / tabular, no delimiters" },
   { value: "markdown", label: "Markdown", desc: "Markdown with math fences" },
   { value: "math_ml", label: "MathML", desc: "XML math markup" },
   { value: "unicode_pretty", label: "Unicode", desc: "Unicode math symbols" },
@@ -22,7 +23,7 @@ export default function FormatsTab() {
     } else {
       current.add(fmt);
     }
-    patch({ copy_as_formats: [...current] });
+    patch({ copy_as_formats: sortFormats([...current]) });
   };
 
   return (

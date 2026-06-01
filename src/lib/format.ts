@@ -25,6 +25,16 @@ const FORMAT_LABELS: Record<OutputFormat, string> = {
   unicode_pretty: "Unicode",
 };
 
+export const FORMAT_ORDER: OutputFormat[] = [
+  "plain",
+  "smart",
+  "inline",
+  "display",
+  "markdown",
+  "math_ml",
+  "unicode_pretty",
+];
+
 /**
  * Resolve the Smart setting to the master-prompt-native output for the
  * detected type: equations are already raw TeX, tables/mixed are Markdown.
@@ -38,8 +48,13 @@ export function labelForFormat(kind: OutputFormat): string {
   return FORMAT_LABELS[kind];
 }
 
+export function sortFormats(kinds: OutputFormat[]): OutputFormat[] {
+  const enabled = new Set(kinds);
+  return FORMAT_ORDER.filter((kind) => enabled.has(kind));
+}
+
 export function copyAsOptions(kinds: OutputFormat[]): FormatOption[] {
-  return kinds.map((kind) => ({ kind, label: labelForFormat(kind) }));
+  return sortFormats(kinds).map((kind) => ({ kind, label: labelForFormat(kind) }));
 }
 
 /**

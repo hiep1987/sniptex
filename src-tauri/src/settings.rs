@@ -73,10 +73,10 @@ impl Default for AppSettings {
                 .collect(),
             default_format: OutputFormat::Smart,
             copy_as_formats: vec![
+                OutputFormat::Plain,
                 OutputFormat::Smart,
                 OutputFormat::Inline,
                 OutputFormat::Display,
-                OutputFormat::Plain,
                 OutputFormat::Markdown,
             ],
             history_size: HistorySize::OneHundred,
