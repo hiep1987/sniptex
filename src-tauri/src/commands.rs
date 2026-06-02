@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::agents::{
     self, keychain,
-    registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID},
+    registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID, LOCAL_FAST_ID},
 };
 use crate::capture::{
     active_monitor_geometry, capture_monitor_region_to_temp_png, CaptureError, MonitorGeometry,
@@ -105,17 +105,29 @@ pub fn hide_window(app: AppHandle, label: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn detect_agents() -> Result<Vec<AgentInfo>, String> {
-    tokio::task::spawn_blocking(agents::detect_installed_agents)
+pub async fn detect_agents(app: AppHandle) -> Result<Vec<AgentInfo>, String> {
+    detect_agents_for_app(&app).await
+}
+
+async fn detect_agents_for_app(app: &AppHandle) -> Result<Vec<AgentInfo>, String> {
+    let mut installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("agent detect join: {e}"))?;
+    let settings = app
+        .try_state::<SettingsStore>()
+        .map(|store| store.get())
+        .unwrap_or_default();
+    installed.extend(agents::local_ocr_api::detect_ready_agents(&settings).await);
+    Ok(installed)
 }
 
 #[tauri::command]
-pub async fn test_agent(agent_id: String, image_path: String) -> Result<TestAgentReport, String> {
-    let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
-        .await
-        .map_err(|e| e.to_string())?;
+pub async fn test_agent(
+    app: AppHandle,
+    agent_id: String,
+    image_path: String,
+) -> Result<TestAgentReport, String> {
+    let installed = detect_agents_for_app(&app).await?;
     let agent = installed
         .into_iter()
         .find(|a| a.spec.id == agent_id)
@@ -336,13 +348,12 @@ async fn run_snip_inner(
     let cropped_guard = TempFileGuard::new(cropped_path.clone());
     let cropped_str = cropped_path.to_string_lossy().to_string();
 
-    let priority = app
-        .try_state::<SettingsStore>()
-        .map(|s| s.get().agent_priority)
-        .unwrap_or_default();
+    let priority = current_agent_priority(app);
 
     let ocr_started = Instant::now();
-    let (text, agent) = run_ocr_for_path(agent_id, &cropped_str, &priority).await?;
+    let outcome = run_ocr_for_path(app, agent_id, &cropped_str, &priority).await?;
+    let text = outcome.text;
+    let agent = outcome.agent_id;
     let latency_ms = ocr_started.elapsed().as_millis() as i64;
     let detected = ocr::detect_type(&text);
 
@@ -350,7 +361,15 @@ async fn run_snip_inner(
     // insert the row. Errors here are logged-and-swallowed so the user
     // still gets their OCR result; History just won't show this snip.
     let store = app.state::<HistoryStore>();
-    let persisted = persist_to_history(&store, &cropped_path, &text, &agent, &detected, latency_ms);
+    let persisted = persist_to_history(
+        &store,
+        &cropped_path,
+        &text,
+        &agent,
+        outcome.via.as_deref(),
+        &detected,
+        latency_ms,
+    );
     // Persistence took ownership of the temp file — disarm the guard so
     // it doesn't try to delete the now-renamed file.
     let (record_id, persisted_image_path) = match persisted {
@@ -382,6 +401,7 @@ fn persist_to_history(
     cropped_path: &Path,
     text: &str,
     agent_id: &str,
+    via_agent_id: Option<&str>,
     detected: &DetectedType,
     latency_ms: i64,
 ) -> Result<(i64, String), String> {
@@ -420,6 +440,7 @@ fn persist_to_history(
         uuid: uuid_str,
         created_at: now,
         agent_id: agent_id.to_string(),
+        via_agent_id: via_agent_id.map(str::to_string),
         output_text: text.to_string(),
         detected_type: detected_str,
         image_path: image_dst.to_string_lossy().to_string(),
@@ -563,13 +584,12 @@ async fn show_overlay_and_await_selection(
 }
 
 async fn run_ocr_for_path(
+    app: &AppHandle,
     agent_id: Option<String>,
     image_path: &str,
     priority: &[String],
-) -> Result<(String, String), String> {
-    let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
-        .await
-        .map_err(|e| format!("agent detect join: {e}"))?;
+) -> Result<ocr::OcrOutcome, String> {
+    let installed = detect_agents_for_app(app).await?;
     if installed.is_empty() {
         return Err("no OCR agents installed (codex / gemini CLI or Gemini API key)".into());
     }
@@ -579,17 +599,41 @@ async fn run_ocr_for_path(
             .iter()
             .find(|a| a.spec.id == id)
             .ok_or_else(|| format!("agent not installed: {id}"))?;
-        let agent_id_str = agent.spec.id.to_string();
-        let text = ocr::run_ocr(agent, image_path)
+        let outcome = ocr::run_ocr_outcome(agent, image_path)
             .await
             .map_err(stringify_dispatch_error)?;
-        Ok((text, agent_id_str))
+        Ok(outcome)
     } else {
-        let (text, agent) = ocr::run_with_fallback(&installed, image_path, priority)
+        let outcome = ocr::run_with_fallback(&installed, image_path, priority)
             .await
             .map_err(stringify_dispatch_error)?;
-        Ok((text, agent.spec.id.to_string()))
+        Ok(outcome)
     }
+}
+
+fn current_agent_priority(app: &AppHandle) -> Vec<String> {
+    let settings = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get())
+        .unwrap_or_default();
+    effective_agent_priority(settings)
+}
+
+fn effective_agent_priority(settings: AppSettings) -> Vec<String> {
+    let mut priority = settings.agent_priority;
+    if !settings.local_ocr_enabled {
+        return priority;
+    }
+    if priority.iter().any(|id| id == LOCAL_FAST_ID) {
+        return priority;
+    }
+    priority.retain(|id| id != LOCAL_FAST_ID);
+    let insert_at = priority
+        .iter()
+        .position(|id| id == CLOUD_MISTRAL_ID)
+        .unwrap_or(0);
+    priority.insert(insert_at, LOCAL_FAST_ID.to_string());
+    priority
 }
 
 #[derive(Serialize)]
@@ -862,14 +906,9 @@ pub async fn run_pdf_ocr(
 
     let (_cancel_slot, cancel_token) = PdfCancelSlot::install();
 
-    let priority = app
-        .try_state::<SettingsStore>()
-        .map(|s| s.get().agent_priority)
-        .unwrap_or_default();
+    let priority = current_agent_priority(&app);
 
-    let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
-        .await
-        .map_err(|e| format!("agent detect join: {e}"))?;
+    let installed = detect_agents_for_app(&app).await?;
     if installed.is_empty() {
         return Err("no OCR agents installed".into());
     }
@@ -1086,6 +1125,7 @@ async fn run_per_page_pdf_ocr(
         (AgentKind::CliBin, _) => ocr::PDF_CLI_PAGE_TIMEOUT,
         (AgentKind::CloudApi, CLOUD_GOCLAW_ID) => ocr::PDF_CLI_PAGE_TIMEOUT,
         (AgentKind::CloudApi, _) => Duration::from_secs(30),
+        (AgentKind::LocalHttp, _) => Duration::from_secs(30),
     };
     // Overall budget = per_page × total. With parallelism, real wall-clock will
     // typically be much less, but keep the upper bound matching the worst-case
@@ -1227,6 +1267,7 @@ fn persist_pdf_to_history(
         uuid: uuid_str,
         created_at: now,
         agent_id: agent_id.to_string(),
+        via_agent_id: None,
         output_text: text.to_string(),
         detected_type: detected_str,
         image_path: image_dst.to_string_lossy().to_string(),
@@ -1264,6 +1305,7 @@ pub struct HistoryRecordDto {
     pub uuid: String,
     pub created_at: i64,
     pub agent: String,
+    pub via: Option<String>,
     pub text: String,
     pub detected: DetectedType,
     pub image_path: String,
@@ -1278,6 +1320,7 @@ impl From<history_repo::Record> for HistoryRecordDto {
             uuid: r.uuid,
             created_at: r.created_at,
             agent: r.agent_id,
+            via: r.via_agent_id,
             text: r.output_text,
             detected: detected_from_string(&r.detected_type),
             image_path: r.image_path,
@@ -1351,28 +1394,24 @@ pub async fn rerun_snip(
         return Err(format!("image missing: {image_path}"));
     }
     log::info!("[rerun] record={record_id} agent={agent_id} image={image_path}");
-    let priority = app
-        .try_state::<SettingsStore>()
-        .map(|s| s.get().agent_priority)
-        .unwrap_or_default();
+    let priority = current_agent_priority(&app);
     let started = Instant::now();
 
     // PDF records need the per-page pipeline. CLI agents can't read PDF
     // bytes; cloud agents need agent-specific routing (mistral has a
     // native endpoint, gemini needs per-page rendering).
-    let (text, used_agent) = if is_pdf_path(&image_path) {
-        let installed = tokio::task::spawn_blocking(agents::detect_installed_agents)
-            .await
-            .map_err(|e| format!("agent detect join: {e}"))?;
+    let (text, used_agent, via_agent) = if is_pdf_path(&image_path) {
+        let installed = detect_agents_for_app(&app).await?;
         let agent = installed
             .iter()
             .find(|a| a.spec.id == agent_id)
             .ok_or_else(|| format!("agent not installed: {agent_id}"))?;
         let used = agent.spec.id.to_string();
         let text = dispatch_pdf_ocr(&app, agent, &image_path).await?;
-        (text, used)
+        (text, used, None)
     } else {
-        run_ocr_for_path(Some(agent_id), &image_path, &priority).await?
+        let outcome = run_ocr_for_path(&app, Some(agent_id), &image_path, &priority).await?;
+        (outcome.text, outcome.agent_id, outcome.via)
     };
 
     let latency_ms = started.elapsed().as_millis() as i64;
@@ -1390,6 +1429,7 @@ pub async fn rerun_snip(
             record_id,
             &text,
             &used_agent,
+            via_agent.as_deref(),
             &detected_str,
             latency_ms,
         )
@@ -1407,6 +1447,7 @@ pub async fn rerun_snip(
         uuid: record.uuid,
         created_at: record.created_at,
         agent: used_agent,
+        via: via_agent,
         text,
         detected,
         image_path: record.image_path,

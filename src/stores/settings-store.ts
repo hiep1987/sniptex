@@ -31,6 +31,10 @@ const DEFAULTS: AppSettings = {
   theme: "system",
   onboarding_completed: false,
   cloud_mode_enabled: false,
+  local_ocr_enabled: false,
+  local_ocr_url: "http://127.0.0.1:8765",
+  local_ocr_formula_enabled: true,
+  local_ocr_text_enabled: true,
 };
 
 export const useSettingsStore = create<SettingsState>((set) => ({

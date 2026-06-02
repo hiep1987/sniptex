@@ -29,7 +29,16 @@ const CLOUD_PROVIDERS: Record<
   },
 };
 
-const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-goclaw", "gemini-cli"];
+const ALL_KNOWN = [
+  "auto-local-fast",
+  "local-pix2tex",
+  "local-paddleocr",
+  "codex",
+  "cloud-gemini",
+  "cloud-mistral",
+  "cloud-goclaw",
+  "gemini-cli",
+];
 
 /// Map an agent id (e.g. "cloud-gemini") to the short provider key the
 /// backend `set_api_key` / `has_api_key` / `delete_api_key` commands accept

@@ -81,6 +81,11 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {item.agent}
           </span>
+          {item.via && (
+            <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+              via {item.via}
+            </span>
+          )}
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {item.detected.replace("_", " ").toLowerCase()}
           </span>

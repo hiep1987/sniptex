@@ -99,6 +99,14 @@ name = "agent_registry_argv"
 path = "tests/rust/agent_registry_argv_test.rs"
 
 [[test]]
+name = "local_ocr_api"
+path = "tests/rust/local_ocr_api_test.rs"
+
+[[test]]
+name = "local_ocr_router"
+path = "tests/rust/local_ocr_router_test.rs"
+
+[[test]]
 name = "gemini_cli_output"
 path = "tests/rust/gemini_cli_output_test.rs"
 

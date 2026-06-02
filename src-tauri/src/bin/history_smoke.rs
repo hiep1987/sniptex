@@ -55,6 +55,7 @@ fn main() -> ExitCode {
             uuid: (*uuid).to_string(),
             created_at: now() + i as i64,
             agent_id: (*agent).to_string(),
+            via_agent_id: None,
             output_text: (*text).to_string(),
             detected_type: (*dtype).to_string(),
             image_path: format!("/dev/null/{uuid}.png"),
@@ -101,6 +102,7 @@ fn main() -> ExitCode {
         target,
         "y = mx + b",
         "gemini-cli",
+        None,
         "EQUATION_ONLY",
         9999,
     )

@@ -61,6 +61,14 @@ pub struct AppSettings {
     pub theme: ThemeMode,
     pub onboarding_completed: bool,
     pub cloud_mode_enabled: bool,
+    #[serde(default)]
+    pub local_ocr_enabled: bool,
+    #[serde(default = "default_local_ocr_url")]
+    pub local_ocr_url: String,
+    #[serde(default = "default_enabled")]
+    pub local_ocr_formula_enabled: bool,
+    #[serde(default = "default_enabled")]
+    pub local_ocr_text_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -86,8 +94,20 @@ impl Default for AppSettings {
             theme: ThemeMode::System,
             onboarding_completed: false,
             cloud_mode_enabled: false,
+            local_ocr_enabled: false,
+            local_ocr_url: default_local_ocr_url(),
+            local_ocr_formula_enabled: true,
+            local_ocr_text_enabled: true,
         }
     }
+}
+
+pub fn default_local_ocr_url() -> String {
+    "http://127.0.0.1:8765".to_string()
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 fn default_hotkey_string() -> String {
@@ -125,7 +145,7 @@ impl SettingsStore {
 
     pub fn update(&self, patch: SettingsPatch) -> Result<AppSettings, String> {
         let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-        apply_patch(&mut guard, patch);
+        apply_patch(&mut guard, patch)?;
         self.persist(&guard)?;
         Ok(guard.clone())
     }
@@ -161,9 +181,13 @@ pub struct SettingsPatch {
     pub theme: Option<ThemeMode>,
     pub onboarding_completed: Option<bool>,
     pub cloud_mode_enabled: Option<bool>,
+    pub local_ocr_enabled: Option<bool>,
+    pub local_ocr_url: Option<String>,
+    pub local_ocr_formula_enabled: Option<bool>,
+    pub local_ocr_text_enabled: Option<bool>,
 }
 
-fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
+fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) -> Result<(), String> {
     if let Some(v) = patch.hotkey {
         settings.hotkey = v;
     }
@@ -196,5 +220,65 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     }
     if let Some(v) = patch.cloud_mode_enabled {
         settings.cloud_mode_enabled = v;
+    }
+    if let Some(v) = patch.local_ocr_enabled {
+        settings.local_ocr_enabled = v;
+    }
+    if let Some(v) = patch.local_ocr_url {
+        let trimmed = v.trim();
+        validate_local_ocr_url(trimmed)?;
+        settings.local_ocr_url = trimmed.to_string();
+    }
+    if let Some(v) = patch.local_ocr_formula_enabled {
+        settings.local_ocr_formula_enabled = v;
+    }
+    if let Some(v) = patch.local_ocr_text_enabled {
+        settings.local_ocr_text_enabled = v;
+    }
+    Ok(())
+}
+
+pub fn validate_local_ocr_url(url: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| {
+        "local_ocr_url must be a valid http://127.0.0.1 or http://localhost URL".to_string()
+    })?;
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    if parsed.scheme() == "http"
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && (host == "127.0.0.1" || host == "localhost")
+    {
+        return Ok(());
+    }
+    Err("local_ocr_url must be http://127.0.0.1 or http://localhost without credentials".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_ocr_url_accepts_loopback_only() {
+        assert!(validate_local_ocr_url("http://127.0.0.1:8765").is_ok());
+        assert!(validate_local_ocr_url("http://localhost:8765").is_ok());
+        assert!(validate_local_ocr_url("https://127.0.0.1:8765").is_err());
+        assert!(validate_local_ocr_url("http://192.168.1.10:8765").is_err());
+        assert!(validate_local_ocr_url("http://localhost.evil.test:8765").is_err());
+        assert!(validate_local_ocr_url("http://localhost:8765@evil.test").is_err());
+        assert!(validate_local_ocr_url("http://127.0.0.1:8765@evil.test").is_err());
+    }
+
+    #[test]
+    fn settings_patch_rejects_remote_local_ocr_url() {
+        let mut settings = AppSettings::default();
+        let result = apply_patch(
+            &mut settings,
+            SettingsPatch {
+                local_ocr_url: Some("http://example.com:8765".to_string()),
+                ..SettingsPatch::default()
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(settings.local_ocr_url, default_local_ocr_url());
     }
 }

@@ -93,7 +93,14 @@ async fn main() -> ExitCode {
                 .iter().map(|s| s.to_string()).collect();
             run_with_fallback(&installed, &image, &default_priority)
                 .await
-                .map(|(t, a)| (t, a.clone()))
+                .and_then(|outcome| {
+                    installed
+                        .iter()
+                        .find(|agent| agent.spec.id == outcome.agent_id)
+                        .cloned()
+                        .map(|agent| (outcome.text, agent))
+                        .ok_or_else(|| sniptex_lib::ocr::DispatchError::AgentNotAvailable(outcome.agent_id))
+                })
         }
     };
 
