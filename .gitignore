@@ -110,6 +110,8 @@ fixtures-*/
 plans/results/
 plans/results-*/
 results/
+# Stray test PDFs at repo root used during manual OCR debugging
+/test-*.pdf
 # Stray artifacts from agent tool-loop attempts during validation
 ocr_prompt.txt
 
