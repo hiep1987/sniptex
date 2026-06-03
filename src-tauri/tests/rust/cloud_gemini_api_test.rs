@@ -12,7 +12,7 @@ use sniptex_lib::ocr::DispatchError;
 fn cloud_model_constant_is_pinned() {
     // Pin guards against silent model swaps that would invalidate every
     // prompt-validation benchmark we've collected.
-    assert_eq!(CLOUD_GEMINI_MODEL, "gemini-2.0-flash");
+    assert_eq!(CLOUD_GEMINI_MODEL, "gemini-2.5-flash-lite");
 }
 
 #[test]

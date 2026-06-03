@@ -1,18 +1,18 @@
 //! Gemini Vision API adapter — direct HTTP, BYOK.
 //!
-//! Free tier: 15 RPM / 1500 RPD on `gemini-2.0-flash`. Image is sent
+//! Free tier availability depends on Google account quota. Image is sent
 //! as base64-inline data (no upload step). 30s timeout matches the CLI
 //! dispatcher so the user sees consistent failure latency.
 //!
 //! Note: previously used `gemini-2.0-flash-exp`, but Google removed the
-//! experimental endpoint when 2.0-flash went GA — pinning to the GA name
-//! keeps us off the deprecation treadmill.
+//! experimental endpoint when 2.0-flash went GA. `gemini-2.5-flash-lite`
+//! is the current stable Flash-Lite model for cost-efficient text+image input.
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub const CLOUD_GEMINI_MODEL: &str = "gemini-2.0-flash";
+pub const CLOUD_GEMINI_MODEL: &str = "gemini-2.5-flash-lite";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
@@ -54,7 +54,9 @@ struct RequestContent<'a> {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum RequestPart<'a> {
-    Text { text: &'a str },
+    Text {
+        text: &'a str,
+    },
     Inline {
         #[serde(rename = "inline_data")]
         inline_data: InlineData,
@@ -167,8 +169,8 @@ async fn call_with_timeout(
         });
     }
 
-    let parsed: GenerateContentResponse = serde_json::from_str(&text)
-        .map_err(|e| CloudGeminiError::Parse(e.to_string()))?;
+    let parsed: GenerateContentResponse =
+        serde_json::from_str(&text).map_err(|e| CloudGeminiError::Parse(e.to_string()))?;
 
     parsed
         .candidates
