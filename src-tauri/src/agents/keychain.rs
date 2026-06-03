@@ -17,6 +17,7 @@ use thiserror::Error;
 pub const SERVICE: &str = "com.sniptex";
 pub const GEMINI_ACCOUNT: &str = "gemini-api-key";
 pub const MISTRAL_ACCOUNT: &str = "mistral-api-key";
+pub const NOVITA_ACCOUNT: &str = "novita-api-key";
 pub const CLOUD_GOCLAW_ACCOUNT: &str = "cloud-goclaw-api-key";
 
 const FALLBACK_FILENAME: &str = "api-keys.json";
@@ -149,6 +150,18 @@ pub fn get_mistral_api_key() -> Result<String, KeychainError> {
 
 pub fn set_mistral_api_key(key: &str) -> Result<(), KeychainError> {
     set(MISTRAL_ACCOUNT, key)
+}
+
+pub fn has_novita_api_key() -> bool {
+    has(NOVITA_ACCOUNT)
+}
+
+pub fn get_novita_api_key() -> Result<String, KeychainError> {
+    get(NOVITA_ACCOUNT)
+}
+
+pub fn set_novita_api_key(key: &str) -> Result<(), KeychainError> {
+    set(NOVITA_ACCOUNT, key)
 }
 
 pub fn has_cloud_goclaw_api_key() -> bool {

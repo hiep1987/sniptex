@@ -46,6 +46,7 @@ pub const CODEX_ID: &str = "codex";
 pub const GEMINI_CLI_ID: &str = "gemini-cli";
 pub const CLOUD_GEMINI_ID: &str = "cloud-gemini";
 pub const CLOUD_MISTRAL_ID: &str = "cloud-mistral";
+pub const CLOUD_NOVITA_ID: &str = "cloud-novita";
 pub const CLOUD_GOCLAW_ID: &str = "cloud-goclaw";
 
 pub const AGENTS: &[AgentSpec] = &[
@@ -78,6 +79,13 @@ pub const AGENTS: &[AgentSpec] = &[
         kind: AgentKind::CloudApi,
     },
     AgentSpec {
+        id: CLOUD_NOVITA_ID,
+        display_name: "DeepSeek-OCR 2",
+        binary_names: &[],
+        supports_vision: true,
+        kind: AgentKind::CloudApi,
+    },
+    AgentSpec {
         id: CLOUD_GOCLAW_ID,
         display_name: "Goclaw OCR Agent",
         binary_names: &[],
@@ -90,6 +98,7 @@ pub const DEFAULT_FALLBACK_CHAIN: &[&str] = &[
     CODEX_ID,
     CLOUD_GEMINI_ID,
     CLOUD_MISTRAL_ID,
+    CLOUD_NOVITA_ID,
     CLOUD_GOCLAW_ID,
     GEMINI_CLI_ID,
 ];
@@ -139,7 +148,7 @@ pub fn build_command_args(
                 "none".into(),
             ]
         }
-        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_GOCLAW_ID => Vec::new(),
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_NOVITA_ID | CLOUD_GOCLAW_ID => Vec::new(),
         other => panic!("Unknown agent id: {other}"),
     }
 }

@@ -3,6 +3,7 @@
 pub mod cloud_gemini_api;
 pub mod cloud_goclaw_api;
 pub mod cloud_mistral_api;
+pub mod cloud_novita_api;
 pub mod codex;
 pub mod gemini_cli;
 pub mod keychain;
@@ -10,6 +11,7 @@ pub mod registry;
 
 use registry::{
     AgentInfo, AgentKind, AgentSpec, AGENTS, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
+    CLOUD_NOVITA_ID,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -49,6 +51,13 @@ pub fn detect_installed_agents() -> Vec<AgentInfo> {
                         spec: spec.clone(),
                         binary_path: PathBuf::from("<cloud-api>"),
                         version: Some("v1".to_string()),
+                    });
+                }
+                if spec.id == CLOUD_NOVITA_ID && keychain::has_novita_api_key() {
+                    results.push(AgentInfo {
+                        spec: spec.clone(),
+                        binary_path: PathBuf::from("<cloud-api>"),
+                        version: Some("deepseek-ocr-2".to_string()),
                     });
                 }
                 if spec.id == CLOUD_GOCLAW_ID && keychain::has_cloud_goclaw_api_key() {

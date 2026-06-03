@@ -25,10 +25,11 @@ use uuid::Uuid;
 use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
 use crate::agents::cloud_goclaw_api::{self, CloudGoclawError};
 use crate::agents::cloud_mistral_api::{self, CloudMistralError};
+use crate::agents::cloud_novita_api::{self, CloudNovitaError};
 use crate::agents::keychain;
 use crate::agents::registry::{
     build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
-    CODEX_ID, GEMINI_CLI_ID,
+    CLOUD_NOVITA_ID, CODEX_ID, GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
@@ -102,6 +103,23 @@ impl From<CloudMistralError> for DispatchError {
             CloudMistralError::Network(m) => DispatchError::Network(m),
             CloudMistralError::EmptyResponse => DispatchError::EmptyOutput,
             CloudMistralError::Parse(m) => DispatchError::BadRequest(m),
+        }
+    }
+}
+
+impl From<CloudNovitaError> for DispatchError {
+    fn from(e: CloudNovitaError) -> Self {
+        match e {
+            CloudNovitaError::RateLimited => DispatchError::RateLimited,
+            CloudNovitaError::BadRequest(m) => DispatchError::BadRequest(m),
+            CloudNovitaError::AuthFailed(c) => DispatchError::AuthFailed(c),
+            CloudNovitaError::ServerError(c, m) => DispatchError::NonZeroExit {
+                code: c as i32,
+                stderr: m,
+            },
+            CloudNovitaError::Network(m) => DispatchError::Network(m),
+            CloudNovitaError::EmptyResponse => DispatchError::EmptyOutput,
+            CloudNovitaError::Parse(m) => DispatchError::BadRequest(m),
         }
     }
 }
@@ -401,6 +419,11 @@ async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, 
             let key = keychain::get_mistral_api_key()
                 .map_err(|_| DispatchError::MissingApiKey("mistral"))?;
             cloud_mistral_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
+        }
+        CLOUD_NOVITA_ID => {
+            let key = keychain::get_novita_api_key()
+                .map_err(|_| DispatchError::MissingApiKey("novita"))?;
+            cloud_novita_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
         }
         CLOUD_GOCLAW_ID => {
             let key = keychain::get_cloud_goclaw_api_key()

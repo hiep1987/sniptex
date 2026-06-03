@@ -22,6 +22,11 @@ const CLOUD_PROVIDERS: Record<
     // create a key expecting free quota.
     linkLabel: "Get a paid key",
   },
+  "cloud-novita": {
+    keyLabel: "Novita.ai",
+    getKeyUrl: "https://novita.ai/settings/key-management",
+    placeholder: "Paste Novita API key (sk_…)",
+  },
   "cloud-goclaw": {
     keyLabel: "Goclaw API Keys",
     getKeyUrl: "https://www.facebook.com/hiep.lequoc.31",
@@ -29,7 +34,7 @@ const CLOUD_PROVIDERS: Record<
   },
 };
 
-const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-goclaw", "gemini-cli"];
+const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-novita", "cloud-goclaw", "gemini-cli"];
 
 /// Map an agent id (e.g. "cloud-gemini") to the short provider key the
 /// backend `set_api_key` / `has_api_key` / `delete_api_key` commands accept
@@ -40,6 +45,8 @@ function providerKeyFor(agentId: string): string | null {
       return "gemini";
     case "cloud-mistral":
       return "mistral";
+    case "cloud-novita":
+      return "novita";
     case "cloud-goclaw":
       return "goclaw";
     default:
@@ -47,7 +54,7 @@ function providerKeyFor(agentId: string): string | null {
   }
 }
 
-const CLOUD_PROVIDER_KEYS = ["gemini", "mistral", "goclaw"] as const;
+const CLOUD_PROVIDER_KEYS = ["gemini", "mistral", "novita", "goclaw"] as const;
 
 export default function AgentsTab() {
   const { agent_priority, patch } = useSettingsStore();

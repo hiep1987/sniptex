@@ -21,7 +21,7 @@ type SettingsState = AppSettings & {
 
 const DEFAULTS: AppSettings = {
   hotkey: "Command+Shift+M",
-  agent_priority: ["codex", "cloud-gemini", "cloud-mistral"],
+  agent_priority: ["codex", "cloud-gemini", "cloud-mistral", "cloud-novita"],
   default_format: "smart",
   copy_as_formats: ["plain", "smart", "inline", "display", "markdown"],
   history_size: "one_hundred",

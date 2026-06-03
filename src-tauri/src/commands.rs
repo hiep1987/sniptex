@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::agents::{
     self, keychain,
-    registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, GEMINI_CLI_ID},
+    registry::{AgentInfo, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CLOUD_NOVITA_ID, GEMINI_CLI_ID},
 };
 use crate::capture::{
     active_monitor_geometry, capture_monitor_region_to_temp_png, CaptureError, MonitorGeometry,
@@ -138,6 +138,7 @@ pub fn set_api_key(provider: String, key: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::set_gemini_api_key(&key).map_err(|e| e.to_string()),
         "mistral" => keychain::set_mistral_api_key(&key).map_err(|e| e.to_string()),
+        "novita" => keychain::set_novita_api_key(&key).map_err(|e| e.to_string()),
         "goclaw" => keychain::set_cloud_goclaw_api_key(&key).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
@@ -148,6 +149,7 @@ pub fn has_api_key(provider: String) -> Result<bool, String> {
     match provider.as_str() {
         "gemini" => Ok(keychain::has_gemini_api_key()),
         "mistral" => Ok(keychain::has_mistral_api_key()),
+        "novita" => Ok(keychain::has_novita_api_key()),
         "goclaw" => Ok(keychain::has_cloud_goclaw_api_key()),
         other => Err(format!("unsupported provider: {other}")),
     }
@@ -158,6 +160,7 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
     match provider.as_str() {
         "gemini" => keychain::delete(keychain::GEMINI_ACCOUNT).map_err(|e| e.to_string()),
         "mistral" => keychain::delete(keychain::MISTRAL_ACCOUNT).map_err(|e| e.to_string()),
+        "novita" => keychain::delete(keychain::NOVITA_ACCOUNT).map_err(|e| e.to_string()),
         "goclaw" => {
             keychain::delete(keychain::CLOUD_GOCLAW_ACCOUNT).map_err(|e| e.to_string())
         }
@@ -175,7 +178,7 @@ pub async fn test_api_key(
     provider: String,
     key: String,
 ) -> Result<TestKeyReport, String> {
-    use crate::agents::{cloud_gemini_api, cloud_goclaw_api, cloud_mistral_api};
+    use crate::agents::{cloud_gemini_api, cloud_goclaw_api, cloud_mistral_api, cloud_novita_api};
 
     let trimmed = key.trim();
     if trimmed.is_empty() {
@@ -197,6 +200,13 @@ pub async fn test_api_key(
         .await
         .map_err(|e| e.to_string())?,
         "mistral" => cloud_mistral_api::call_with_image_path(
+            &image_path_str,
+            ocr::MASTER_PROMPT,
+            trimmed,
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+        "novita" => cloud_novita_api::call_with_image_path(
             &image_path_str,
             ocr::MASTER_PROMPT,
             trimmed,
@@ -787,6 +797,7 @@ impl Drop for CaptureVisibilityGuard {
 // Compile-time guard: cloud agent id stays exported from registry.
 const _: &str = CLOUD_GEMINI_ID;
 const _: &str = CLOUD_MISTRAL_ID;
+const _: &str = CLOUD_NOVITA_ID;
 
 // -----------------------------------------------------------------------
 // PDF OCR command
@@ -1018,7 +1029,8 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
 /// CLIs at 1 (effectively sequential) and let cloud agents fan out.
 fn pdf_page_concurrency(agent_id: &str) -> usize {
     use crate::agents::registry::{
-        CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID, CODEX_ID, GEMINI_CLI_ID,
+        CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID, CLOUD_NOVITA_ID, CODEX_ID,
+        GEMINI_CLI_ID,
     };
     match agent_id {
         // Local CLI subprocess — concurrency hurts on local CPU + the upstream
@@ -1027,7 +1039,7 @@ fn pdf_page_concurrency(agent_id: &str) -> usize {
         // gpt-5.4 over Goclaw — single ChatGPT-Plus account, don't hammer.
         CLOUD_GOCLAW_ID => 2,
         // Cloud vision APIs with proper rate limits.
-        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID => 5,
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_NOVITA_ID => 5,
         // Unknown agents: default to a safe middle.
         _ => 3,
     }
