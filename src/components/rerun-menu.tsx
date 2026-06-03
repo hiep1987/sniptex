@@ -6,7 +6,7 @@ type AgentInfoDto = {
   spec: {
     id: string;
     display_name: string;
-    kind: "CliBin" | "CloudApi" | "LocalHttp";
+    kind: "CliBin" | "CloudApi";
   };
   binary_path: string;
   version: string | null;

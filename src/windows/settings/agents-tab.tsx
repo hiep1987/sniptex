@@ -29,16 +29,7 @@ const CLOUD_PROVIDERS: Record<
   },
 };
 
-const ALL_KNOWN = [
-  "auto-local-fast",
-  "local-pix2tex",
-  "local-paddleocr",
-  "codex",
-  "cloud-gemini",
-  "cloud-mistral",
-  "cloud-goclaw",
-  "gemini-cli",
-];
+const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-goclaw", "gemini-cli"];
 
 /// Map an agent id (e.g. "cloud-gemini") to the short provider key the
 /// backend `set_api_key` / `has_api_key` / `delete_api_key` commands accept
@@ -58,12 +49,8 @@ function providerKeyFor(agentId: string): string | null {
 
 const CLOUD_PROVIDER_KEYS = ["gemini", "mistral", "goclaw"] as const;
 
-function isLocalAgent(agentId: string): boolean {
-  return agentId === "auto-local-fast" || agentId.startsWith("local-");
-}
-
 export default function AgentsTab() {
-  const { agent_priority, local_ocr_enabled, patch } = useSettingsStore();
+  const { agent_priority, patch } = useSettingsStore();
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [scanning, setScanning] = useState(false);
   const [keyStates, setKeyStates] = useState<Record<string, boolean>>({});
@@ -150,19 +137,10 @@ export default function AgentsTab() {
         {allIds.map((id, idx) => {
           const info = agents.find((a) => a.spec.id === id);
           const isCloud = id.startsWith("cloud-");
-          const isLocal = isLocalAgent(id);
           const providerKey = providerKeyFor(id);
           const hasKey = providerKey ? keyStates[providerKey] ?? false : false;
           const installed = !!info;
           const cloud = CLOUD_PROVIDERS[id];
-          const agentKind = isCloud ? "Cloud" : isLocal ? "Local" : "CLI";
-          const agentStatus = isCloud
-            ? hasKey ? "Key set" : "No key"
-            : isLocal
-              ? !local_ocr_enabled
-                ? "Disabled"
-                : installed ? "Daemon ready" : "Daemon offline"
-              : installed ? "Installed" : "CLI not found";
 
           return (
             <div
@@ -199,26 +177,22 @@ export default function AgentsTab() {
                         "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
                         isCloud
                           ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                          : isLocal
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
                           : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
                       )}
                     >
-                      {agentKind}
+                      {isCloud ? "Cloud" : "CLI"}
                     </span>
                     <span
                       className={cn(
                         "rounded px-1.5 py-0.5 text-[10px]",
                         installed || hasKey
                           ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                          : isLocal
-                            ? local_ocr_enabled
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                           : "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-400",
                       )}
                     >
-                      {agentStatus}
+                      {isCloud
+                        ? hasKey ? "Key set" : "No key"
+                        : installed ? "Installed" : "Not found"}
                     </span>
                   </div>
                   {info?.version && (

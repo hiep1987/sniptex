@@ -6,12 +6,6 @@ pub mod cloud_mistral_api;
 pub mod codex;
 pub mod gemini_cli;
 pub mod keychain;
-pub mod local_ocr_api;
-pub mod local_ocr_cache;
-pub mod local_ocr_client;
-pub mod local_ocr_paddleocr;
-pub mod local_ocr_pix2tex;
-pub mod local_ocr_router;
 pub mod registry;
 
 use registry::{
@@ -65,7 +59,6 @@ pub fn detect_installed_agents() -> Vec<AgentInfo> {
                     });
                 }
             }
-            AgentKind::LocalHttp => {}
         }
     }
     results

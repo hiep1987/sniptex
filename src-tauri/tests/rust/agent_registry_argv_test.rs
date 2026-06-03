@@ -3,7 +3,7 @@
 
 use sniptex_lib::agents::registry::{
     build_command_args, spec_by_id, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CODEX_ID,
-    DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID, LOCAL_FAST_ID, LOCAL_PADDLEOCR_ID, LOCAL_PIX2TEX_ID,
+    DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID,
 };
 
 #[test]
@@ -85,14 +85,4 @@ fn spec_by_id_finds_mistral() {
     let spec = spec_by_id(CLOUD_MISTRAL_ID).expect("cloud-mistral spec should exist");
     assert_eq!(spec.display_name, "Mistral Vision API");
     assert!(spec.supports_vision);
-}
-
-#[test]
-fn local_http_agents_are_catalogued_but_not_spawned_as_cli() {
-    for id in [LOCAL_PIX2TEX_ID, LOCAL_PADDLEOCR_ID, LOCAL_FAST_ID] {
-        let spec = spec_by_id(id).expect("local agent spec should exist");
-        assert!(spec.supports_vision);
-        assert!(spec.binary_names.is_empty());
-        assert!(build_command_args(id, "/tmp/img.png", "PROMPT", None).is_empty());
-    }
 }

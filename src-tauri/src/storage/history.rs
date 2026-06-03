@@ -11,7 +11,6 @@ pub struct NewRecord {
     pub uuid: String,
     pub created_at: i64,
     pub agent_id: String,
-    pub via_agent_id: Option<String>,
     pub output_text: String,
     pub detected_type: String,
     pub image_path: String,
@@ -25,7 +24,6 @@ pub struct Record {
     pub uuid: String,
     pub created_at: i64,
     pub agent_id: String,
-    pub via_agent_id: Option<String>,
     pub output_text: String,
     pub detected_type: String,
     pub image_path: String,
@@ -36,14 +34,13 @@ pub struct Record {
 pub fn insert(conn: &Connection, rec: &NewRecord) -> SqlResult<i64> {
     conn.execute(
         "INSERT INTO snip_records
-            (uuid, created_at, agent_id, via_agent_id, output_text,
+            (uuid, created_at, agent_id, output_text,
              detected_type, image_path, thumb_path, latency_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             rec.uuid,
             rec.created_at,
             rec.agent_id,
-            rec.via_agent_id,
             rec.output_text,
             rec.detected_type,
             rec.image_path,
@@ -56,7 +53,7 @@ pub fn insert(conn: &Connection, rec: &NewRecord) -> SqlResult<i64> {
 
 pub fn recent(conn: &Connection, limit: usize) -> SqlResult<Vec<Record>> {
     let mut stmt = conn.prepare(
-        "SELECT id, uuid, created_at, agent_id, via_agent_id, output_text,
+        "SELECT id, uuid, created_at, agent_id, output_text,
                 detected_type, image_path, thumb_path, latency_ms
          FROM snip_records
          ORDER BY created_at DESC, id DESC
@@ -76,8 +73,8 @@ pub fn search(conn: &Connection, query: &str, limit: usize) -> SqlResult<Vec<Rec
     // JOIN the FTS table to the content table; ORDER BY rank gives us
     // BM25 relevance (newer rows tied by id desc).
     let mut stmt = conn.prepare(
-        "SELECT r.id, r.uuid, r.created_at, r.agent_id, r.via_agent_id,
-                r.output_text, r.detected_type, r.image_path, r.thumb_path, r.latency_ms
+        "SELECT r.id, r.uuid, r.created_at, r.agent_id, r.output_text,
+                r.detected_type, r.image_path, r.thumb_path, r.latency_ms
          FROM snip_records_fts f
          JOIN snip_records r ON r.id = f.rowid
          WHERE snip_records_fts MATCH ?1
@@ -90,7 +87,7 @@ pub fn search(conn: &Connection, query: &str, limit: usize) -> SqlResult<Vec<Rec
 
 pub fn find_by_id(conn: &Connection, id: i64) -> SqlResult<Option<Record>> {
     let mut stmt = conn.prepare(
-        "SELECT id, uuid, created_at, agent_id, via_agent_id, output_text,
+        "SELECT id, uuid, created_at, agent_id, output_text,
                 detected_type, image_path, thumb_path, latency_ms
          FROM snip_records WHERE id = ?1",
     )?;
@@ -102,7 +99,6 @@ pub fn update_output(
     id: i64,
     new_text: &str,
     new_agent: &str,
-    new_via_agent: Option<&str>,
     new_detected: &str,
     new_latency_ms: i64,
 ) -> SqlResult<usize> {
@@ -110,11 +106,10 @@ pub fn update_output(
         "UPDATE snip_records
          SET output_text = ?1,
              agent_id = ?2,
-             via_agent_id = ?3,
-             detected_type = ?4,
-             latency_ms = ?5
-         WHERE id = ?6",
-        params![new_text, new_agent, new_via_agent, new_detected, new_latency_ms, id],
+             detected_type = ?3,
+             latency_ms = ?4
+         WHERE id = ?5",
+        params![new_text, new_agent, new_detected, new_latency_ms, id],
     )
 }
 
@@ -167,12 +162,11 @@ fn row_to_record(row: &Row<'_>) -> SqlResult<Record> {
         uuid: row.get(1)?,
         created_at: row.get(2)?,
         agent_id: row.get(3)?,
-        via_agent_id: row.get(4)?,
-        output_text: row.get(5)?,
-        detected_type: row.get(6)?,
-        image_path: row.get(7)?,
-        thumb_path: row.get(8)?,
-        latency_ms: row.get(9)?,
+        output_text: row.get(4)?,
+        detected_type: row.get(5)?,
+        image_path: row.get(6)?,
+        thumb_path: row.get(7)?,
+        latency_ms: row.get(8)?,
     })
 }
 

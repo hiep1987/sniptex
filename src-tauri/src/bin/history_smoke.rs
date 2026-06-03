@@ -43,10 +43,25 @@ fn main() -> ExitCode {
 
     // Seed 5 records with distinct text + agent + type.
     let fixtures = [
-        ("eq-1", "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}", "EQUATION_ONLY", "codex"),
+        (
+            "eq-1",
+            "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+            "EQUATION_ONLY",
+            "codex",
+        ),
         ("eq-2", "\\int_0^1 x^2 dx", "EQUATION_ONLY", "gemini-cli"),
-        ("tab-1", "| a | b |\n|---|---|\n| 1 | 2 |", "TABLE_ONLY", "codex"),
-        ("mix-1", "Equation E=mc^2 explains relativity", "MIXED", "cloud-gemini"),
+        (
+            "tab-1",
+            "| a | b |\n|---|---|\n| 1 | 2 |",
+            "TABLE_ONLY",
+            "codex",
+        ),
+        (
+            "mix-1",
+            "Equation E=mc^2 explains relativity",
+            "MIXED",
+            "cloud-gemini",
+        ),
         ("mix-2", "Vận tốc là độ biến thiên vị trí", "MIXED", "codex"),
     ];
     let mut ids = Vec::new();
@@ -55,7 +70,6 @@ fn main() -> ExitCode {
             uuid: (*uuid).to_string(),
             created_at: now() + i as i64,
             agent_id: (*agent).to_string(),
-            via_agent_id: None,
             output_text: (*text).to_string(),
             detected_type: (*dtype).to_string(),
             image_path: format!("/dev/null/{uuid}.png"),
@@ -80,7 +94,10 @@ fn main() -> ExitCode {
     all_ok &= step(
         "FTS Vietnamese diacritic-insensitive",
         viet.iter().any(|r| r.uuid == "mix-2"),
-        format!("hits = {:?}", viet.iter().map(|r| r.uuid.clone()).collect::<Vec<_>>()),
+        format!(
+            "hits = {:?}",
+            viet.iter().map(|r| r.uuid.clone()).collect::<Vec<_>>()
+        ),
     );
 
     // FTS: latex command
@@ -88,7 +105,10 @@ fn main() -> ExitCode {
     all_ok &= step(
         "FTS finds \\frac",
         latex.iter().any(|r| r.uuid == "eq-1"),
-        format!("hits = {:?}", latex.iter().map(|r| r.uuid.clone()).collect::<Vec<_>>()),
+        format!(
+            "hits = {:?}",
+            latex.iter().map(|r| r.uuid.clone()).collect::<Vec<_>>()
+        ),
     );
 
     // FTS: special chars don't blow up the parser
@@ -102,7 +122,6 @@ fn main() -> ExitCode {
         target,
         "y = mx + b",
         "gemini-cli",
-        None,
         "EQUATION_ONLY",
         9999,
     )
@@ -133,7 +152,11 @@ fn main() -> ExitCode {
     all_ok &= step(
         "enforce_max_records trims oldest",
         victims.len() == 2 && after_evict.len() == 2,
-        format!("evicted = {}, remaining = {}", victims.len(), after_evict.len()),
+        format!(
+            "evicted = {}, remaining = {}",
+            victims.len(),
+            after_evict.len()
+        ),
     );
 
     drop(conn);
@@ -148,7 +171,14 @@ fn main() -> ExitCode {
             ts = r.created_at,
             agent = r.agent_id,
             dtype = r.detected_type,
-            text = r.output_text.lines().next().unwrap_or("").chars().take(60).collect::<String>(),
+            text = r
+                .output_text
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(60)
+                .collect::<String>(),
         );
     }
     drop(final_conn);

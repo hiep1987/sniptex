@@ -10,10 +10,6 @@
 //!   5. `cloud-goclaw` — Skill-based agent on the user's Goclaw VPS, accessed
 //!      over WebSocket. Reuses a ChatGPT Plus subscription via Goclaw's
 //!      `openai-codex-1` provider, no separate OpenAI API spend.
-//!   6. Optional localhost local-OCR daemon agents (`local-pix2tex`,
-//!      `local-paddleocr`, `auto-local-fast`). The direct agents are
-//!      surfaced by daemon capabilities; the auto router is catalogued
-//!      now and surfaced once its Phase 4 dispatcher exists.
 //!
 //! Adding more (Claude Code, OpenCode) becomes a mechanical change here
 //! plus a new adapter file under `agents/`.
@@ -27,8 +23,6 @@ pub enum AgentKind {
     CliBin,
     /// HTTPS call from inside the Tauri process.
     CloudApi,
-    /// Localhost HTTP daemon managed by the user.
-    LocalHttp,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -43,7 +37,7 @@ pub struct AgentSpec {
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentInfo {
     pub spec: AgentSpec,
-    /// CLI agents: resolved binary path. Cloud agents: placeholder. Local agents: daemon URL.
+    /// CLI agents: resolved binary path. Cloud agents: synthetic placeholder.
     pub binary_path: PathBuf,
     pub version: Option<String>,
 }
@@ -53,9 +47,6 @@ pub const GEMINI_CLI_ID: &str = "gemini-cli";
 pub const CLOUD_GEMINI_ID: &str = "cloud-gemini";
 pub const CLOUD_MISTRAL_ID: &str = "cloud-mistral";
 pub const CLOUD_GOCLAW_ID: &str = "cloud-goclaw";
-pub const LOCAL_PIX2TEX_ID: &str = "local-pix2tex";
-pub const LOCAL_PADDLEOCR_ID: &str = "local-paddleocr";
-pub const LOCAL_FAST_ID: &str = "auto-local-fast";
 
 pub const AGENTS: &[AgentSpec] = &[
     AgentSpec {
@@ -92,27 +83,6 @@ pub const AGENTS: &[AgentSpec] = &[
         binary_names: &[],
         supports_vision: true,
         kind: AgentKind::CloudApi,
-    },
-    AgentSpec {
-        id: LOCAL_PIX2TEX_ID,
-        display_name: "Local pix2tex",
-        binary_names: &[],
-        supports_vision: true,
-        kind: AgentKind::LocalHttp,
-    },
-    AgentSpec {
-        id: LOCAL_PADDLEOCR_ID,
-        display_name: "Local PaddleOCR",
-        binary_names: &[],
-        supports_vision: true,
-        kind: AgentKind::LocalHttp,
-    },
-    AgentSpec {
-        id: LOCAL_FAST_ID,
-        display_name: "Auto Local Fast OCR",
-        binary_names: &[],
-        supports_vision: true,
-        kind: AgentKind::LocalHttp,
     },
 ];
 
@@ -169,8 +139,7 @@ pub fn build_command_args(
                 "none".into(),
             ]
         }
-        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_GOCLAW_ID | LOCAL_PIX2TEX_ID
-        | LOCAL_PADDLEOCR_ID | LOCAL_FAST_ID => Vec::new(),
+        CLOUD_GEMINI_ID | CLOUD_MISTRAL_ID | CLOUD_GOCLAW_ID => Vec::new(),
         other => panic!("Unknown agent id: {other}"),
     }
 }

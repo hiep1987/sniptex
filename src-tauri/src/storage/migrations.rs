@@ -5,12 +5,10 @@
 //!   * `snip_records` — one row per successful OCR snip.
 //!   * `snip_records_fts` — external-content FTS5 virtual table over `output_text`.
 //!   * Triggers to keep FTS in sync (insert + delete + update).
-//! V2 adds:
-//!   * `via_agent_id` — optional router/origin agent for records produced via an auto router.
 
 use rusqlite::{Connection, Result as SqlResult};
 
-const CURRENT_VERSION: i32 = 2;
+const CURRENT_VERSION: i32 = 1;
 
 pub fn run(conn: &mut Connection) -> SqlResult<()> {
     let version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -22,20 +20,8 @@ pub fn run(conn: &mut Connection) -> SqlResult<()> {
     if version < 1 {
         apply_v1(&tx)?;
     }
-    if version < 2 {
-        apply_v2(&tx)?;
-    }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;
-    Ok(())
-}
-
-fn apply_v2(tx: &rusqlite::Transaction<'_>) -> SqlResult<()> {
-    tx.execute_batch(
-        r#"
-        ALTER TABLE snip_records ADD COLUMN via_agent_id TEXT;
-        "#,
-    )?;
     Ok(())
 }
 

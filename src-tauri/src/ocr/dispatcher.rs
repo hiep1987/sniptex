@@ -5,7 +5,6 @@
 //!     Codex captures clean output via `--output-last-message`; Gemini CLI
 //!     emits JSON and we consume only `.response`.
 //!   * `CloudApi` — calls the in-process HTTPS adapter.
-//!   * `LocalHttp` — localhost daemon adapters for local OCR workers.
 //!
 //! Output is always run through `post_process`; empty / `[UNREADABLE]`
 //! is mapped to `EmptyOutput` so callers can trigger fallback.
@@ -27,13 +26,9 @@ use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
 use crate::agents::cloud_goclaw_api::{self, CloudGoclawError};
 use crate::agents::cloud_mistral_api::{self, CloudMistralError};
 use crate::agents::keychain;
-use crate::agents::local_ocr_client::LocalOcrError;
-use crate::agents::local_ocr_paddleocr;
-use crate::agents::local_ocr_pix2tex;
-use crate::agents::local_ocr_router;
 use crate::agents::registry::{
     build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
-    CODEX_ID, GEMINI_CLI_ID, LOCAL_FAST_ID, LOCAL_PADDLEOCR_ID, LOCAL_PIX2TEX_ID,
+    CODEX_ID, GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
@@ -128,50 +123,10 @@ impl From<CloudGoclawError> for DispatchError {
     }
 }
 
-impl From<LocalOcrError> for DispatchError {
-    fn from(e: LocalOcrError) -> Self {
-        match e {
-            LocalOcrError::Unavailable(m) => DispatchError::AgentNotAvailable(m),
-            LocalOcrError::Timeout(s) => DispatchError::Timeout(s),
-            LocalOcrError::Unsupported(m) => DispatchError::BadRequest(m),
-            LocalOcrError::BadRequest(m) => DispatchError::BadRequest(m),
-            LocalOcrError::EmptyResponse => DispatchError::EmptyOutput,
-            LocalOcrError::LowConfidence(c) => {
-                DispatchError::BadRequest(format!("low confidence: {c:.2}"))
-            }
-            LocalOcrError::Parse(m) => DispatchError::BadRequest(m),
-            LocalOcrError::Io(m) => DispatchError::Io(m),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OcrOutcome {
-    pub text: String,
-    pub agent_id: String,
-    pub via: Option<String>,
-}
-
 pub async fn run_ocr(agent: &AgentInfo, image_path: &str) -> Result<String, DispatchError> {
-    run_ocr_outcome(agent, image_path)
-        .await
-        .map(|outcome| outcome.text)
-}
-
-pub async fn run_ocr_outcome(
-    agent: &AgentInfo,
-    image_path: &str,
-) -> Result<OcrOutcome, DispatchError> {
     match agent.spec.kind {
-        AgentKind::CliBin => {
-            let text = run_cli_agent(agent, image_path, DISPATCH_TIMEOUT).await?;
-            Ok(outcome(text, agent.spec.id, None))
-        }
-        AgentKind::CloudApi => {
-            let text = run_cloud_agent(agent, image_path).await?;
-            Ok(outcome(text, agent.spec.id, None))
-        }
-        AgentKind::LocalHttp => run_local_agent(agent, image_path).await,
+        AgentKind::CliBin => run_cli_agent(agent, image_path, DISPATCH_TIMEOUT).await,
+        AgentKind::CloudApi => run_cloud_agent(agent, image_path).await,
     }
 }
 
@@ -186,7 +141,6 @@ pub async fn run_ocr_pdf_page(
     match agent.spec.kind {
         AgentKind::CliBin => run_cli_agent(agent, image_path, PDF_CLI_PAGE_TIMEOUT).await,
         AgentKind::CloudApi => run_cloud_agent(agent, image_path).await,
-        AgentKind::LocalHttp => run_local_agent(agent, image_path).await.map(|o| o.text),
     }
 }
 
@@ -462,52 +416,21 @@ async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, 
     Ok(cleaned)
 }
 
-async fn run_local_agent(agent: &AgentInfo, image_path: &str) -> Result<OcrOutcome, DispatchError> {
-    let base_url = agent.binary_path.to_string_lossy();
-    let (raw, agent_id, via) = match agent.spec.id {
-        LOCAL_PIX2TEX_ID => (
-            local_ocr_pix2tex::pix2tex(&base_url, image_path).await?,
-            LOCAL_PIX2TEX_ID,
-            None,
-        ),
-        LOCAL_PADDLEOCR_ID => (
-            local_ocr_paddleocr::paddleocr(&base_url, image_path).await?,
-            LOCAL_PADDLEOCR_ID,
-            None,
-        ),
-        LOCAL_FAST_ID => {
-            let routed = local_ocr_router::auto_route(&base_url, image_path).await?;
-            (routed.text, routed.agent_id, Some(routed.via))
-        }
-        _ => {
-            return Err(DispatchError::AgentNotAvailable(format!(
-                "{} adapter is not implemented yet",
-                agent.spec.id
-            )))
-        }
-    };
-    let cleaned = post_process(&raw);
-    if cleaned.is_empty() || cleaned == "[UNREADABLE]" {
-        return Err(DispatchError::EmptyOutput);
-    }
-    Ok(outcome(cleaned, agent_id, via))
-}
-
 /// Try `agents` in the given `priority` order, return the first `Ok`.
 /// Last error is propagated so callers can surface "all agents failed".
 pub async fn run_with_fallback<'a>(
     agents: &'a [AgentInfo],
     image_path: &str,
     priority: &[String],
-) -> Result<OcrOutcome, DispatchError> {
+) -> Result<(String, &'a AgentInfo), DispatchError> {
     let ordered = order_by_priority(agents, priority);
     if ordered.is_empty() {
         return Err(DispatchError::AgentNotAvailable("<none installed>".into()));
     }
     let mut last_err: Option<DispatchError> = None;
     for agent in ordered {
-        match run_ocr_outcome(agent, image_path).await {
-            Ok(outcome) => return Ok(outcome),
+        match run_ocr(agent, image_path).await {
+            Ok(text) => return Ok((text, agent)),
             Err(e) => {
                 eprintln!("[sniptex] agent {} failed: {}", agent.spec.id, e);
                 last_err = Some(e);
@@ -531,14 +454,6 @@ fn order_by_priority<'a>(agents: &'a [AgentInfo], priority: &[String]) -> Vec<&'
         }
     }
     ordered
-}
-
-fn outcome(text: String, agent_id: &str, via: Option<&str>) -> OcrOutcome {
-    OcrOutcome {
-        text,
-        agent_id: agent_id.to_string(),
-        via: via.map(str::to_string),
-    }
 }
 
 fn looks_like_rate_limit(stderr: &str) -> bool {
@@ -654,39 +569,5 @@ mod tests {
     fn codex_out_of_credits_ignores_generic_credit_words() {
         assert!(!looks_like_codex_out_of_credits("credit card form failed"));
         assert!(!looks_like_codex_out_of_credits("rate limited"));
-    }
-
-    #[tokio::test]
-    async fn local_paddleocr_routes_through_dispatcher() {
-        let spec = crate::agents::registry::spec_by_id(LOCAL_PADDLEOCR_ID)
-            .expect("local-paddleocr spec exists")
-            .clone();
-        let agent = AgentInfo {
-            spec,
-            binary_path: PathBuf::from("http://127.0.0.1:8765"),
-            version: None,
-        };
-
-        let err = run_ocr(&agent, "/tmp/sniptex-missing-local-page.png")
-            .await
-            .expect_err("missing image should fail after local adapter is selected");
-        assert!(matches!(err, DispatchError::Io(_)), "got: {err}");
-    }
-
-    #[tokio::test]
-    async fn pdf_page_local_http_routes_to_local_adapter() {
-        let spec = crate::agents::registry::spec_by_id(LOCAL_PADDLEOCR_ID)
-            .expect("local-paddleocr spec exists")
-            .clone();
-        let agent = AgentInfo {
-            spec,
-            binary_path: PathBuf::from("http://127.0.0.1:8765"),
-            version: None,
-        };
-
-        let err = run_ocr_pdf_page(&agent, "/tmp/sniptex-missing-local-page.png")
-            .await
-            .expect_err("missing rendered page should fail after local adapter is selected");
-        assert!(matches!(err, DispatchError::Io(_)), "got: {err}");
     }
 }

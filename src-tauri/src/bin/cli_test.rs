@@ -89,18 +89,14 @@ async fn main() -> ExitCode {
         }
         None => {
             eprintln!("\nrunning OCR with fallback chain");
-            let default_priority: Vec<String> = sniptex_lib::agents::registry::DEFAULT_FALLBACK_CHAIN
-                .iter().map(|s| s.to_string()).collect();
+            let default_priority: Vec<String> =
+                sniptex_lib::agents::registry::DEFAULT_FALLBACK_CHAIN
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
             run_with_fallback(&installed, &image, &default_priority)
                 .await
-                .and_then(|outcome| {
-                    installed
-                        .iter()
-                        .find(|agent| agent.spec.id == outcome.agent_id)
-                        .cloned()
-                        .map(|agent| (outcome.text, agent))
-                        .ok_or_else(|| sniptex_lib::ocr::DispatchError::AgentNotAvailable(outcome.agent_id))
-                })
+                .map(|(t, a)| (t, a.clone()))
         }
     };
 

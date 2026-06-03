@@ -21,7 +21,6 @@ fn new_record(uuid: &str, ts: i64, text: &str) -> history::NewRecord {
         uuid: uuid.to_string(),
         created_at: ts,
         agent_id: "codex".into(),
-        via_agent_id: None,
         output_text: text.into(),
         detected_type: "EQUATION_ONLY".into(),
         image_path: format!("/tmp/{uuid}.png"),
@@ -44,7 +43,7 @@ fn init_runs_migration_creates_tables() {
         .unwrap();
     assert_eq!(count, 2);
     let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 1);
 }
 
 #[test]
@@ -123,19 +122,12 @@ fn update_output_replaces_text_and_keeps_fts_in_sync() {
     let conn = store.conn.lock().unwrap();
     let id = history::insert(&conn, &new_record("a", 100, "old phrase")).unwrap();
 
-    let updated = history::update_output(
-        &conn,
-        id,
-        "fresh phrase",
-        "gemini-cli",
-        None,
-        "MIXED",
-        999,
-    )
-    .unwrap();
+    let updated =
+        history::update_output(&conn, id, "fresh phrase", "gemini-cli", "MIXED", 999).unwrap();
     assert_eq!(updated, 1);
 
-    let missing = history::update_output(&conn, 99999, "x", "y", None, "MIXED", 1).unwrap();
+    let missing =
+        history::update_output(&conn, 99999, "x", "y", "MIXED", 1).unwrap();
     assert_eq!(missing, 0);
 
     let rec = history::find_by_id(&conn, id).unwrap().unwrap();

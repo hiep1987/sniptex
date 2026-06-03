@@ -21,7 +21,6 @@ export type HistoryRecord = {
   uuid: string;
   created_at: number; // unix epoch seconds
   agent: string;
-  via: string | null;
   text: string;
   detected: DetectedType;
   image_path: string;
@@ -58,15 +57,11 @@ export type AppSettings = {
   theme: ThemeMode;
   onboarding_completed: boolean;
   cloud_mode_enabled: boolean;
-  local_ocr_enabled: boolean;
-  local_ocr_url: string;
-  local_ocr_formula_enabled: boolean;
-  local_ocr_text_enabled: boolean;
 };
 
 export type SettingsPatch = Partial<AppSettings>;
 
-export type AgentKind = "CliBin" | "CloudApi" | "LocalHttp";
+export type AgentKind = "CliBin" | "CloudApi";
 export type AgentInfo = {
   spec: {
     id: string;
