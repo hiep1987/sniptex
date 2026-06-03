@@ -61,7 +61,27 @@ pub async fn call(
     if normalized.is_empty() {
         return Err(CloudNovitaHybridError::EmptyResponse);
     }
+    if !needs_gpt_cleanup(&normalized) {
+        return Ok(normalized);
+    }
     call_gpt_oss_cleanup(&client, &normalized, prompt, api_key).await
+}
+
+pub fn needs_gpt_cleanup(markdown: &str) -> bool {
+    let lower = markdown.to_lowercase();
+    lower.contains("\\textbackslash")
+        || lower.contains("textbackslash")
+        || lower.contains("\\begin") && lower.contains("\\text{end")
+        || lower.contains("\\text{end{tabular}")
+        || lower.contains("\\textbackslash{begin}")
+        || lower.contains("\\textbackslash{hline}")
+        || lower.contains("\\ &")
+        || lower.contains("\\begin{tabular}") && suspicious_tabular_shape(markdown)
+}
+
+fn suspicious_tabular_shape(markdown: &str) -> bool {
+    let separator_count = markdown.matches(" & \\").count() + markdown.matches("\\ &").count();
+    separator_count >= 3
 }
 
 fn map_deepseek_error(err: CloudNovitaError) -> CloudNovitaHybridError {

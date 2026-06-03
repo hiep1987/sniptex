@@ -1,6 +1,6 @@
 use sniptex_lib::agents::cloud_novita_hybrid_api::{
-    mime_for, normalize_intermediate_markdown, parse_gpt_oss_response, redact_key,
-    redact_url_secrets, CloudNovitaHybridError, GPT_OSS_ENDPOINT, GPT_OSS_MODEL,
+    mime_for, needs_gpt_cleanup, normalize_intermediate_markdown, parse_gpt_oss_response,
+    redact_key, redact_url_secrets, CloudNovitaHybridError, GPT_OSS_ENDPOINT, GPT_OSS_MODEL,
 };
 use sniptex_lib::ocr::DispatchError;
 
@@ -40,6 +40,29 @@ fn empty_outputs_error() {
 fn normalize_intermediate_caps_and_collapses_blank_lines() {
     let raw = "a\n\n\nb\n";
     assert_eq!(normalize_intermediate_markdown(raw), "a\n\nb");
+}
+
+#[test]
+fn clean_table_output_skips_gpt_cleanup() {
+    let text = r#"Câu 7.
+\begin{tabular}{|l|l|l|}
+\hline
+Giá trị & [135;140) & [140;145) \\ \hline
+Tần số & 6 & 10 \\ \hline
+\end{tabular}"#;
+    assert!(!needs_gpt_cleanup(text));
+}
+
+#[test]
+fn escaped_latex_source_triggers_gpt_cleanup() {
+    let text = r#"Câu 7.
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbackslash{begin} & \textbackslash{tabular} & \{ & \} \\ \hline
+\textbackslash{hline} & Giá trị & \ & [135;140) \\ \hline
+\end{tabular}
+\text{end{tabular}"#;
+    assert!(needs_gpt_cleanup(text));
 }
 
 #[test]
