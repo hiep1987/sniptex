@@ -2,8 +2,8 @@
 //! "cleanup" refactor can't silently break the CLI contract.
 
 use sniptex_lib::agents::registry::{
-    build_command_args, spec_by_id, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CODEX_ID,
-    DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID,
+    build_command_args, spec_by_id, CLOUD_GEMINI_ID, CLOUD_MISTRAL_ID, CLOUD_NOVITA_HYBRID_ID,
+    CODEX_ID, DEFAULT_FALLBACK_CHAIN, GEMINI_CLI_ID,
 };
 
 #[test]
@@ -46,7 +46,9 @@ fn gemini_cli_uses_interactive_like_headless_prompt() {
     assert!(args
         .windows(2)
         .any(|pair| pair == ["--include-directories", "/tmp"]));
-    assert!(args.windows(2).any(|pair| pair == ["--output-format", "text"]));
+    assert!(args
+        .windows(2)
+        .any(|pair| pair == ["--output-format", "text"]));
     assert!(args.windows(2).any(|pair| pair == ["-e", "none"]));
     assert!(!args.iter().any(|a| a == "--session-id"));
     assert!(!args.iter().any(|a| a == "--yolo" || a == "-y"));
@@ -68,6 +70,12 @@ fn cloud_mistral_returns_empty_argv() {
 }
 
 #[test]
+fn cloud_novita_hybrid_returns_empty_argv() {
+    let args = build_command_args(CLOUD_NOVITA_HYBRID_ID, "/tmp/img.png", "PROMPT", None);
+    assert!(args.is_empty());
+}
+
+#[test]
 fn fallback_chain_includes_mistral_after_gemini() {
     let gemini_idx = DEFAULT_FALLBACK_CHAIN
         .iter()
@@ -84,5 +92,12 @@ fn fallback_chain_includes_mistral_after_gemini() {
 fn spec_by_id_finds_mistral() {
     let spec = spec_by_id(CLOUD_MISTRAL_ID).expect("cloud-mistral spec should exist");
     assert_eq!(spec.display_name, "Mistral Vision API");
+    assert!(spec.supports_vision);
+}
+
+#[test]
+fn spec_by_id_finds_novita_hybrid() {
+    let spec = spec_by_id(CLOUD_NOVITA_HYBRID_ID).expect("cloud-novita-hybrid spec should exist");
+    assert_eq!(spec.display_name, "Novita OCR + GPT OSS");
     assert!(spec.supports_vision);
 }

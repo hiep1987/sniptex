@@ -69,6 +69,10 @@ path = "src/bin/history_smoke.rs"
 name = "pdf_smoke"
 path = "src/bin/pdf_smoke.rs"
 
+[[bin]]
+name = "novita_hybrid_smoke"
+path = "src/bin/novita_hybrid_smoke.rs"
+
 
 [[test]]
 name = "ocr_postprocess"
@@ -93,6 +97,10 @@ path = "tests/rust/cloud_mistral_api_test.rs"
 [[test]]
 name = "cloud_goclaw_api"
 path = "tests/rust/cloud_goclaw_api_test.rs"
+
+[[test]]
+name = "cloud_novita_hybrid_api"
+path = "tests/rust/cloud_novita_hybrid_api_test.rs"
 
 [[test]]
 name = "agent_registry_argv"

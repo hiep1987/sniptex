@@ -27,6 +27,12 @@ const CLOUD_PROVIDERS: Record<
     getKeyUrl: "https://novita.ai/settings/key-management",
     placeholder: "Paste Novita API key (sk_…)",
   },
+  "cloud-novita-hybrid": {
+    keyLabel: "Novita.ai",
+    getKeyUrl: "https://novita.ai/settings/key-management",
+    placeholder: "Paste Novita API key (sk_…)",
+    linkLabel: "Manage key",
+  },
   "cloud-goclaw": {
     keyLabel: "Goclaw API Keys",
     getKeyUrl: "https://www.facebook.com/hiep.lequoc.31",
@@ -34,7 +40,15 @@ const CLOUD_PROVIDERS: Record<
   },
 };
 
-const ALL_KNOWN = ["codex", "cloud-gemini", "cloud-mistral", "cloud-novita", "cloud-goclaw", "gemini-cli"];
+const ALL_KNOWN = [
+  "codex",
+  "cloud-gemini",
+  "cloud-mistral",
+  "cloud-novita",
+  "cloud-novita-hybrid",
+  "cloud-goclaw",
+  "gemini-cli",
+];
 
 /// Map an agent id (e.g. "cloud-gemini") to the short provider key the
 /// backend `set_api_key` / `has_api_key` / `delete_api_key` commands accept
@@ -46,6 +60,7 @@ function providerKeyFor(agentId: string): string | null {
     case "cloud-mistral":
       return "mistral";
     case "cloud-novita":
+    case "cloud-novita-hybrid":
       return "novita";
     case "cloud-goclaw":
       return "goclaw";

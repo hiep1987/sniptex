@@ -4,14 +4,16 @@ pub mod cloud_gemini_api;
 pub mod cloud_goclaw_api;
 pub mod cloud_mistral_api;
 pub mod cloud_novita_api;
+pub mod cloud_novita_hybrid_api;
 pub mod codex;
 pub mod gemini_cli;
 pub mod keychain;
+pub mod novita_hybrid_contract;
 pub mod registry;
 
 use registry::{
     AgentInfo, AgentKind, AgentSpec, AGENTS, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
-    CLOUD_NOVITA_ID,
+    CLOUD_NOVITA_HYBRID_ID, CLOUD_NOVITA_ID,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -60,6 +62,16 @@ pub fn detect_installed_agents() -> Vec<AgentInfo> {
                         version: Some("deepseek-ocr-2".to_string()),
                     });
                 }
+                if spec.id == CLOUD_NOVITA_HYBRID_ID
+                    && keychain::has_novita_api_key()
+                    && cloud_novita_hybrid_api::has_required_config()
+                {
+                    results.push(AgentInfo {
+                        spec: spec.clone(),
+                        binary_path: PathBuf::from("<cloud-api>"),
+                        version: Some("deepseek-ocr-2 + gpt-oss-120b".to_string()),
+                    });
+                }
                 if spec.id == CLOUD_GOCLAW_ID && keychain::has_cloud_goclaw_api_key() {
                     results.push(AgentInfo {
                         spec: spec.clone(),
@@ -73,11 +85,7 @@ pub fn detect_installed_agents() -> Vec<AgentInfo> {
     results
 }
 
-fn locate_cli_agent(
-    spec: &AgentSpec,
-    dirs: &[PathBuf],
-    exe_suffix: &str,
-) -> Option<AgentInfo> {
+fn locate_cli_agent(spec: &AgentSpec, dirs: &[PathBuf], exe_suffix: &str) -> Option<AgentInfo> {
     for bin_name in spec.binary_names {
         let full = format!("{bin_name}{exe_suffix}");
         for dir in dirs {
@@ -128,10 +136,11 @@ pub fn is_executable(p: &Path) -> bool {
 
 #[cfg(windows)]
 pub fn is_executable(p: &Path) -> bool {
-    p.is_file() && p.extension().map_or(false, |e| {
-        let ext = e.to_string_lossy().to_ascii_lowercase();
-        ext == "exe" || ext == "cmd" || ext == "bat"
-    })
+    p.is_file()
+        && p.extension().map_or(false, |e| {
+            let ext = e.to_string_lossy().to_ascii_lowercase();
+            ext == "exe" || ext == "cmd" || ext == "bat"
+        })
 }
 
 /// Run `<binary> --version` with a 2s budget. Best-effort: returns None

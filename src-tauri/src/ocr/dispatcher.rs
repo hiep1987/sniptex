@@ -26,10 +26,11 @@ use crate::agents::cloud_gemini_api::{self, CloudGeminiError};
 use crate::agents::cloud_goclaw_api::{self, CloudGoclawError};
 use crate::agents::cloud_mistral_api::{self, CloudMistralError};
 use crate::agents::cloud_novita_api::{self, CloudNovitaError};
+use crate::agents::cloud_novita_hybrid_api::{self, CloudNovitaHybridError};
 use crate::agents::keychain;
 use crate::agents::registry::{
     build_command_args, AgentInfo, AgentKind, CLOUD_GEMINI_ID, CLOUD_GOCLAW_ID, CLOUD_MISTRAL_ID,
-    CLOUD_NOVITA_ID, CODEX_ID, GEMINI_CLI_ID,
+    CLOUD_NOVITA_HYBRID_ID, CLOUD_NOVITA_ID, CODEX_ID, GEMINI_CLI_ID,
 };
 use crate::ocr::postprocess::post_process;
 use crate::ocr::prompt::{GEMINI_CLI_PROMPT, MASTER_PROMPT};
@@ -124,6 +125,23 @@ impl From<CloudNovitaError> for DispatchError {
     }
 }
 
+impl From<CloudNovitaHybridError> for DispatchError {
+    fn from(e: CloudNovitaHybridError) -> Self {
+        match e {
+            CloudNovitaHybridError::RateLimited => DispatchError::RateLimited,
+            CloudNovitaHybridError::BadRequest(m) => DispatchError::BadRequest(m),
+            CloudNovitaHybridError::AuthFailed(c) => DispatchError::AuthFailed(c),
+            CloudNovitaHybridError::ServerError(c, m) => DispatchError::NonZeroExit {
+                code: c as i32,
+                stderr: m,
+            },
+            CloudNovitaHybridError::Network(m) => DispatchError::Network(m),
+            CloudNovitaHybridError::EmptyResponse => DispatchError::EmptyOutput,
+            CloudNovitaHybridError::Parse(m) => DispatchError::BadRequest(m),
+        }
+    }
+}
+
 impl From<CloudGoclawError> for DispatchError {
     fn from(e: CloudGoclawError) -> Self {
         match e {
@@ -167,21 +185,11 @@ pub async fn run_ocr_pdf_page(
 /// exit paths via RAII. Overall budget scales to `pages * DISPATCH_TIMEOUT`
 /// — per-page enforcement still lives in `run_cli_agent`; the outer wrap
 /// guards against runaway iteration if a per-page error path stalled.
-pub async fn run_pdf_cli(
-    agent: &AgentInfo,
-    pdf_path: &str,
-) -> Result<String, DispatchError> {
-    let tmp = TempDir::new(staging_path(&format!(
-        "pdf-pages-{}",
-        Uuid::new_v4()
-    )))?;
+pub async fn run_pdf_cli(agent: &AgentInfo, pdf_path: &str) -> Result<String, DispatchError> {
+    let tmp = TempDir::new(staging_path(&format!("pdf-pages-{}", Uuid::new_v4())))?;
 
-    let page_pngs = crate::ocr::pdf_render::render_pages_to_pngs(
-        pdf_path,
-        tmp.path(),
-        None,
-    )
-    .map_err(|e| DispatchError::Io(e.to_string()))?;
+    let page_pngs = crate::ocr::pdf_render::render_pages_to_pngs(pdf_path, tmp.path(), None)
+        .map_err(|e| DispatchError::Io(e.to_string()))?;
 
     if page_pngs.is_empty() {
         return Err(DispatchError::EmptyOutput);
@@ -248,12 +256,7 @@ async fn run_cli_agent(
         _ => MASTER_PROMPT,
     };
 
-    let args = build_command_args(
-        agent.spec.id,
-        image_path,
-        prompt,
-        last_msg_str.as_deref(),
-    );
+    let args = build_command_args(agent.spec.id, image_path, prompt, last_msg_str.as_deref());
     let mut cmd = Command::new(&agent.binary_path);
     cmd.args(&args)
         .stdin(Stdio::null())
@@ -339,9 +342,8 @@ struct GeminiCliNamedToolStats {
 }
 
 pub fn parse_gemini_cli_json_response(stdout: &str) -> Result<String, DispatchError> {
-    let parsed: GeminiCliJsonResponse = serde_json::from_str(stdout.trim()).map_err(|e| {
-        DispatchError::BadRequest(format!("gemini-cli returned invalid JSON: {e}"))
-    })?;
+    let parsed: GeminiCliJsonResponse = serde_json::from_str(stdout.trim())
+        .map_err(|e| DispatchError::BadRequest(format!("gemini-cli returned invalid JSON: {e}")))?;
     if let Some(error) = parsed.error {
         return Err(DispatchError::BadRequest(format!(
             "gemini-cli error: {}",
@@ -400,9 +402,7 @@ pub fn looks_like_gemini_tool_error(response: &str) -> bool {
     response.contains("Error executing tool")
         || lower.contains("path not in workspace")
         || (lower.contains("default_api_")
-            && (lower.contains("error")
-                || lower.contains("failed")
-                || lower.contains("failure")))
+            && (lower.contains("error") || lower.contains("failed") || lower.contains("failure")))
         || lower.contains("error executing tool read_file")
         || lower.contains("error executing tool write_file")
         || lower.contains("attempted path")
@@ -424,6 +424,11 @@ async fn run_cloud_agent(agent: &AgentInfo, image_path: &str) -> Result<String, 
             let key = keychain::get_novita_api_key()
                 .map_err(|_| DispatchError::MissingApiKey("novita"))?;
             cloud_novita_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
+        }
+        CLOUD_NOVITA_HYBRID_ID => {
+            let key = keychain::get_novita_api_key()
+                .map_err(|_| DispatchError::MissingApiKey("novita"))?;
+            cloud_novita_hybrid_api::call_with_image_path(image_path, MASTER_PROMPT, &key).await?
         }
         CLOUD_GOCLAW_ID => {
             let key = keychain::get_cloud_goclaw_api_key()
@@ -484,7 +489,9 @@ fn looks_like_rate_limit(stderr: &str) -> bool {
     // co-occurring with a rate-limit token. Prevents a stray "429" port
     // number / request id in stderr from flipping the fallback path.
     let lower = stderr.to_lowercase();
-    if lower.contains("rate limit") || lower.contains("quota") || lower.contains("too many requests")
+    if lower.contains("rate limit")
+        || lower.contains("quota")
+        || lower.contains("too many requests")
     {
         return true;
     }
