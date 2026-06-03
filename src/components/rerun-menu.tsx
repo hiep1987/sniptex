@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 
+const VIEWPORT_GAP = 8;
+const MENU_GAP = 4;
+const MIN_MENU_WIDTH = 176;
+
 type AgentInfoDto = {
   spec: {
     id: string;
@@ -23,13 +27,53 @@ export function RerunMenu({ anchorEl, currentAgent, onClose, onPick }: Props) {
   const [agents, setAgents] = useState<AgentInfoDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     if (!anchorEl) return;
-    const rect = anchorEl.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.right });
-  }, [anchorEl]);
+
+    const updatePosition = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      const menuHeight = rootRef.current?.offsetHeight ?? 0;
+      const menuWidth = rootRef.current?.offsetWidth ?? MIN_MENU_WIDTH;
+      const spaceBelow =
+        window.innerHeight - rect.bottom - MENU_GAP - VIEWPORT_GAP;
+      const spaceAbove = rect.top - MENU_GAP - VIEWPORT_GAP;
+      const opensBelow = menuHeight <= spaceBelow || spaceBelow >= spaceAbove;
+      const availableHeight = Math.max(
+        VIEWPORT_GAP,
+        opensBelow ? spaceBelow : spaceAbove,
+      );
+      const top = opensBelow
+        ? rect.bottom + MENU_GAP
+        : Math.max(
+            VIEWPORT_GAP,
+            rect.top - MENU_GAP - Math.min(menuHeight, availableHeight),
+          );
+      const maxLeft = Math.max(
+        VIEWPORT_GAP,
+        window.innerWidth - menuWidth - VIEWPORT_GAP,
+      );
+      const left = Math.min(
+        Math.max(VIEWPORT_GAP, rect.right - menuWidth),
+        maxLeft,
+      );
+
+      setPos({ top, left, maxHeight: availableHeight });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchorEl, agents, error]);
 
   useEffect(() => {
     invoke<AgentInfoDto[]>("detect_agents")
@@ -54,8 +98,13 @@ export function RerunMenu({ anchorEl, currentAgent, onClose, onPick }: Props) {
   const menu = (
     <div
       ref={rootRef}
-      style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-100%)" }}
-      className="z-50 min-w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      style={{
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        maxHeight: pos.maxHeight,
+      }}
+      className="z-50 min-w-44 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
     >
       <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Rerun with
