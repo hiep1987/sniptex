@@ -16,7 +16,9 @@ A Novita API key saved in Settings under Novita.ai.
 
 - GPT OSS 120B receives only DeepSeek-OCR markdown, not the original image.
 - Intermediate markdown is capped before cleanup.
-- GPT output is capped to 4096 tokens.
+- Clean DeepSeek-OCR output returns directly without GPT OSS cleanup.
+- GPT output is capped to 2048 tokens.
+- Cleanup fails if GPT OSS still leaves escaped LaTeX/table artifacts, allowing the dispatcher to use the next configured fallback agent.
 - The agent is not in the default fallback chain until live benchmarks prove quality and cost.
 
 ## Smoke Test

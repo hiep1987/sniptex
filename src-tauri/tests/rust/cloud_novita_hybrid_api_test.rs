@@ -1,6 +1,7 @@
 use sniptex_lib::agents::cloud_novita_hybrid_api::{
     mime_for, needs_gpt_cleanup, normalize_intermediate_markdown, parse_gpt_oss_response,
     redact_key, redact_url_secrets, CloudNovitaHybridError, GPT_OSS_ENDPOINT, GPT_OSS_MODEL,
+    MAX_GPT_TOKENS,
 };
 use sniptex_lib::ocr::DispatchError;
 
@@ -11,6 +12,7 @@ fn constants_are_pinned() {
         GPT_OSS_ENDPOINT,
         "https://api.novita.ai/openai/v1/chat/completions"
     );
+    assert_eq!(MAX_GPT_TOKENS, 2048);
 }
 
 #[test]

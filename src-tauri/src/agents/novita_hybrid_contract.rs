@@ -3,7 +3,7 @@ use serde::Deserialize;
 pub const GPT_OSS_MODEL: &str = "openai/gpt-oss-120b";
 pub const GPT_OSS_ENDPOINT: &str = "https://api.novita.ai/openai/v1/chat/completions";
 pub const MAX_INTERMEDIATE_CHARS: usize = 12_000;
-pub const MAX_GPT_TOKENS: u32 = 4096;
+pub const MAX_GPT_TOKENS: u32 = 2048;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudNovitaHybridError {

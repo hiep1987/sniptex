@@ -99,11 +99,11 @@ fn map_deepseek_error(err: CloudNovitaError) -> CloudNovitaHybridError {
 async fn call_gpt_oss_cleanup(
     client: &reqwest::Client,
     markdown: &str,
-    prompt: &str,
+    _prompt: &str,
     api_key: &str,
 ) -> Result<String, CloudNovitaHybridError> {
     let text = format!(
-        "{prompt}\n\nSource OCR markdown from {CLOUD_NOVITA_MODEL}:\n\n{markdown}\n\nRepair OCR formatting artifacts and return only the final corrected LaTeX/Markdown.\n\nRules:\n- Do not invent missing content.\n- Preserve Vietnamese labels and answer choices.\n- If a LaTeX table was OCR'd as escaped source, reconstruct one clean tabular.\n- Convert artifacts like \\textbackslash{{begin}}, \\textbackslash{{hline}}, stray `\\ &`, and duplicated separator cells into valid LaTeX.\n- Return [UNREADABLE] if the source is insufficient."
+        "Fix OCR artifacts in this math/table OCR. Return only final LaTeX/Markdown. Preserve Vietnamese labels and answer choices. Do not invent content. Rebuild escaped LaTeX tables like \\textbackslash{{begin}}, \\textbackslash{{hline}}, or stray `\\ &`. Return [UNREADABLE] if insufficient.\n\nSource from {CLOUD_NOVITA_MODEL}:\n{markdown}"
     );
     let body = ChatRequest {
         model: GPT_OSS_MODEL,
@@ -114,9 +114,15 @@ async fn call_gpt_oss_cleanup(
         max_tokens: MAX_GPT_TOKENS,
         temperature: 0.0,
     };
-    post_json(client, GPT_ENDPOINT, api_key, &body, GPT_TIMEOUT)
+    let cleaned = post_json(client, GPT_ENDPOINT, api_key, &body, GPT_TIMEOUT)
         .await
-        .and_then(|text| parse_gpt_oss_response(&text))
+        .and_then(|text| parse_gpt_oss_response(&text))?;
+    if needs_gpt_cleanup(&cleaned) {
+        return Err(CloudNovitaHybridError::BadRequest(
+            "GPT cleanup left OCR artifacts".to_string(),
+        ));
+    }
+    Ok(cleaned)
 }
 
 async fn post_json(
