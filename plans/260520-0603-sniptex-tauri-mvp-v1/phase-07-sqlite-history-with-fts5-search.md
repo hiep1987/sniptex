@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "SQLite History with FTS5 Search"
-status: in-progress
+status: completed
 priority: P2
 effort: "1d"
 dependencies: [6]
@@ -25,8 +25,8 @@ Persist every successful snip to a local SQLite database with thumbnail, raw out
 **Functional**
 - On successful snip → insert record (id, ts, agent_id, output_text, detected_type, thumb_path, image_path)
 - FTS5 search across `output_text`
-- History Window lists records (newest first), supports search, right-click menu (Rerun with..., Delete, Export, Copy)
-- "Rerun with..." submenu shows installed agents; spawns OCR on the saved original image with chosen agent
+- History Window lists records (newest first), supports search. Row actions exposed as hover-revealed icon buttons (Copy / Rerun with… / Delete) — not a right-click context menu.
+- "Rerun with..." icon opens a popup listing installed agents; spawns OCR on the saved original image with chosen agent
 
 **Non-functional**
 - Search returns within 100ms for 10k records
@@ -108,8 +108,8 @@ END;
    - On HistoryWindow mount → `getHistory(100)`
    - On search input change (debounced 200ms) → `searchHistory(query, 100)`
    - On delete → call backend + remove from local state
-8. Build `HistoryRow.tsx`: thumbnail + truncated text preview + relative timestamp + agent badge + context menu trigger.
-9. Build `RerunMenu.tsx`: list installed agents, on click call `rerunSnip`, replace row's output in store.
+8. Build `HistoryRow.tsx`: thumbnail + truncated text preview + relative timestamp + agent badge + hover-revealed action icons (Copy / Rerun / Delete).
+9. Build `RerunMenu.tsx`: popup anchored to the rerun icon, lists installed agents, on click call `rerunSnip`, replace row's output in store.
 10. Smoke test: do 5 snips → all appear in History → search filters correctly → delete works → rerun with different agent updates row.
 
 ## Todo List
@@ -125,15 +125,15 @@ END;
 - [x] Wire historyStore.ts with fetch + debounced search (200 ms)
 - [x] Build HistoryRow + RerunMenu components
 - [x] 7 Rust integration tests covering insert/search/delete/update/eviction/FTS escape
-- [ ] Live smoke test in the running app: insert, search, delete, rerun
+- [x] Live smoke test in the running app: insert, search, delete, rerun
 
 ## Success Criteria
 
-- [ ] 100+ snips persist across app restarts
-- [ ] FTS5 search returns matching records <100ms (verified on seeded 1k records)
-- [ ] Delete removes row + thumb + image files
-- [ ] Rerun with different agent produces new text; UI updates without manual refresh
-- [ ] Eviction policy trims to user-set max on next insert
+- [x] 100+ snips persist across app restarts
+- [x] FTS5 search returns matching records <100ms (verified on seeded 1k records)
+- [x] Delete removes row + thumb + image files
+- [x] Rerun with different agent produces new text; UI updates without manual refresh
+- [x] Eviction policy trims to user-set max on next insert
 
 ## Risk Assessment
 
