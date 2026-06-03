@@ -3,7 +3,12 @@ use serde::Deserialize;
 pub const GPT_OSS_MODEL: &str = "openai/gpt-oss-120b";
 pub const GPT_OSS_ENDPOINT: &str = "https://api.novita.ai/openai/v1/chat/completions";
 pub const MAX_INTERMEDIATE_CHARS: usize = 12_000;
-pub const MAX_GPT_TOKENS: u32 = 2048;
+/// Empirical: GPT-OSS-120B routes a large chunk of `max_tokens` into
+/// hidden chain-of-thought (`reasoning_content`) before producing
+/// `content`. At 2048 the model exhausts the budget while still
+/// "thinking" on non-trivial OCR cleanups and returns an empty content
+/// string. 8192 leaves enough headroom for both phases.
+pub const MAX_GPT_TOKENS: u32 = 8192;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudNovitaHybridError {

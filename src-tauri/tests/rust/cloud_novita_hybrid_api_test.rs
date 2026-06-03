@@ -1,7 +1,7 @@
 use sniptex_lib::agents::cloud_novita_hybrid_api::{
-    mime_for, needs_gpt_cleanup, normalize_intermediate_markdown, parse_gpt_oss_response,
-    redact_key, redact_url_secrets, CloudNovitaHybridError, GPT_OSS_ENDPOINT, GPT_OSS_MODEL,
-    MAX_GPT_TOKENS,
+    looks_hallucinated, mime_for, needs_gpt_cleanup, normalize_intermediate_markdown,
+    parse_gpt_oss_response, redact_key, redact_url_secrets, CloudNovitaHybridError,
+    GPT_OSS_ENDPOINT, GPT_OSS_MODEL, MAX_GPT_TOKENS,
 };
 use sniptex_lib::ocr::DispatchError;
 
@@ -12,7 +12,7 @@ fn constants_are_pinned() {
         GPT_OSS_ENDPOINT,
         "https://api.novita.ai/openai/v1/chat/completions"
     );
-    assert_eq!(MAX_GPT_TOKENS, 2048);
+    assert_eq!(MAX_GPT_TOKENS, 8192);
 }
 
 #[test]
@@ -83,6 +83,42 @@ fn redact_url_secrets_strips_userinfo_and_query() {
     assert!(!cleaned.contains("token"));
     assert!(!cleaned.contains("api_key=abc"));
     assert!(cleaned.contains("https://example.com/v1/chat?<redacted>"));
+}
+
+#[test]
+fn hallucinated_boxed_answer_is_rejected() {
+    let source = "Câu 7. Mốt của mẫu số liệu bằng\nA. 151.75. B. 20. C. 152. D. 151.5.";
+    let output = "Câu 7. Mốt của mẫu số liệu bằng\nA. 151.75. B. 20. C. 152. D. 151.5.\n\\boxed{\\bar{x}=151.5}";
+    assert!(looks_hallucinated(source, output));
+}
+
+#[test]
+fn hallucinated_aligned_derivation_is_rejected() {
+    let source = "\\begin{tabular}{|c|c|}\n\\hline\n[135;140) & 6 \\\\ \\hline\n\\end{tabular}";
+    let output = "\\begin{tabular}{|c|c|}\n\\hline\n[135;140) & 6 \\\\ \\hline\n\\end{tabular}\n\\begin{aligned}\nN &= 6+10+12 = 28\n\\end{aligned}";
+    assert!(looks_hallucinated(source, output));
+}
+
+#[test]
+fn hallucinated_bar_statistical_symbol_is_rejected() {
+    let source = "Tính trung bình mẫu số liệu sau:";
+    let output = "Tính trung bình mẫu số liệu sau:\n\\bar{x} = 151.5";
+    assert!(looks_hallucinated(source, output));
+}
+
+#[test]
+fn legitimate_boxed_already_in_source_passes() {
+    // Image legitimately captured a \boxed{} answer; GPT keeping it is NOT a hallucination.
+    let source = "Đáp số: \\boxed{42}";
+    let output = "Đáp số: \\boxed{42}";
+    assert!(!looks_hallucinated(source, output));
+}
+
+#[test]
+fn clean_table_cleanup_passes_hallucination_check() {
+    let source = "Câu 7. \\textbackslash{begin}{tabular} ... Tần số & 6 & 10 \\\\ A. 5. B. 6.";
+    let output = "Câu 7. \\begin{tabular} ... Tần số & 6 & 10 \\\\ A. 5. B. 6.";
+    assert!(!looks_hallucinated(source, output));
 }
 
 #[test]

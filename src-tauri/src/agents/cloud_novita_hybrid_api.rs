@@ -103,7 +103,42 @@ async fn call_gpt_oss_cleanup(
     api_key: &str,
 ) -> Result<String, CloudNovitaHybridError> {
     let text = format!(
-        "Fix OCR artifacts in this math/table OCR. Return only final LaTeX/Markdown. Preserve Vietnamese labels and answer choices. Do not invent content. Rebuild escaped LaTeX tables like \\textbackslash{{begin}}, \\textbackslash{{hline}}, or stray `\\ &`. Return [UNREADABLE] if insufficient.\n\nSource from {CLOUD_NOVITA_MODEL}:\n{markdown}"
+        "You are an OCR escape-artifact cleaner. You are NOT a solver, tutor, or formatter. Your only job is to undo specific LaTeX over-escaping in the source. The source is OCR output captured for verbatim copy-paste, so anything you add to it is a regression.\n\n\
+        STRICT RULES — violating any single rule means the output is wrong:\n\
+        1. Output ONLY content derived from the source. Never invent text, headers, labels, or computations.\n\
+        2. NEVER solve math problems. If the source contains a question (e.g. \"Mốt của mẫu số liệu...\"), copy it verbatim — do NOT compute the answer.\n\
+        3. NEVER add: `\\boxed{{...}}`, `\\bar{{...}}`, `\\begin{{aligned}}`, midpoint formulas, mean / median / mode derivations, \"Đáp án:\", \"Answer:\", \"Solution:\", \"Tính ...\", \"Bảng ... đã sửa\", or any heading that is not literally present in the source.\n\
+        4. Preserve EVERY question header (\"Câu N.\"), every multiple-choice option line (A./B./C./D./E.), and every numeric value, character-for-character. If a choice exists in source, it MUST exist in output.\n\
+        5. ONLY fix these specific over-escape artifacts:\n\
+           - `\\textbackslash{{begin}}` → `\\begin`\n\
+           - `\\textbackslash{{tabular}}` → `\\tabular`\n\
+           - `\\textbackslash{{hline}}` → `\\hline`\n\
+           - `\\textbackslash{{end}}` → `\\end`\n\
+           - `\\text{{end{{tabular}}}}` → `\\end{{tabular}}`\n\
+           - Stray ` & \\` / `\\ &` cell separators inside tabular rows\n\
+        6. Preserve table SHAPE from the source: if source shows a 1-row + 1-row tabular (Giá trị header row, Tần số data row across columns), output the SAME 2×N shape. Do NOT pivot rows-to-columns.\n\
+        7. If artifacts cannot be cleaned without inventing content, return literally `[UNREADABLE]` and nothing else.\n\n\
+        Few-shot example (note: no extra labels, no derivation, choices preserved):\n\
+        Source:\n\
+        ```\n\
+        Câu 1. Cho bảng:\n\
+        \\begin{{tabular}}{{|c|c|}}\n\
+        \\textbackslash{{hline}} & Giá trị \\\\\n\
+        \\end{{tabular}}\n\
+        Mốt bằng\n\
+        A. 5. B. 6.\n\
+        ```\n\
+        Cleaned:\n\
+        ```\n\
+        Câu 1. Cho bảng:\n\
+        \\begin{{tabular}}{{|c|c|}}\n\
+        \\hline\n\
+        Giá trị \\\\\n\
+        \\end{{tabular}}\n\
+        Mốt bằng\n\
+        A. 5. B. 6.\n\
+        ```\n\n\
+        Source from {CLOUD_NOVITA_MODEL}:\n{markdown}"
     );
     let body = ChatRequest {
         model: GPT_OSS_MODEL,
@@ -122,7 +157,33 @@ async fn call_gpt_oss_cleanup(
             "GPT cleanup left OCR artifacts".to_string(),
         ));
     }
+    if looks_hallucinated(markdown, &cleaned) {
+        return Err(CloudNovitaHybridError::BadRequest(
+            "GPT cleanup hallucinated content not in source".to_string(),
+        ));
+    }
     Ok(cleaned)
+}
+
+/// Detect GPT-introduced content not present in the source markdown.
+///
+/// GPT-OSS-120B has a strong "tutor" bias: shown a math question, it tries to
+/// solve it even when explicitly told to only clean syntax. The fingerprints
+/// of that failure mode are LaTeX constructs that appear in the cleaned output
+/// but not the OCR source — `\boxed{...}` final answers, `\bar{x}` / `\bar{y}`
+/// statistical symbols introduced for mean derivations, and `\begin{aligned}`
+/// blocks holding multi-step computations. Any one of those appearing only on
+/// the output side means GPT invented content; reject so the dispatcher can
+/// fall back to a non-hallucinating agent.
+pub fn looks_hallucinated(source: &str, output: &str) -> bool {
+    const SUSPICIOUS: &[&str] = &[
+        "\\boxed{",
+        "\\bar{",
+        "\\begin{aligned}",
+    ];
+    SUSPICIOUS
+        .iter()
+        .any(|pattern| output.contains(pattern) && !source.contains(pattern))
 }
 
 async fn post_json(
