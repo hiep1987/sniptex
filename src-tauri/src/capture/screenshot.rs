@@ -19,7 +19,9 @@ pub enum CaptureError {
     NoMonitorAtCursor(i32, i32),
     #[error("screen capture failed: {0}")]
     Capture(String),
-    #[error("missing screen recording permission (macOS System Settings → Privacy → Screen Recording)")]
+    #[error(
+        "missing screen recording permission (macOS System Settings → Privacy → Screen Recording)"
+    )]
     PermissionDenied,
     #[error("selection has zero area")]
     ZeroAreaSelection,
@@ -70,13 +72,12 @@ pub fn capture_monitor_region_to_temp_png(
     geometry: &MonitorGeometry,
     sel: SelectionRect,
 ) -> Result<PathBuf, CaptureError> {
-    let (x, y, w, h) = clamp_selection_to_monitor(
-        sel,
-        geometry.logical_width,
-        geometry.logical_height,
-    )?;
+    let (x, y, w, h) =
+        clamp_selection_to_monitor(sel, geometry.logical_width, geometry.logical_height)?;
     let monitor = monitor_by_id(geometry.monitor_id)?;
-    let img = monitor.capture_region(x, y, w, h).map_err(map_capture_error)?;
+    let img = monitor
+        .capture_region(x, y, w, h)
+        .map_err(map_capture_error)?;
     save_temp_png(img, "sniptex")
 }
 
@@ -102,13 +103,21 @@ fn monitor_by_id(id: u32) -> Result<Monitor, CaptureError> {
             return Ok(monitor);
         }
     }
-    Err(CaptureError::Capture(format!("monitor {id} no longer available")))
+    Err(CaptureError::Capture(format!(
+        "monitor {id} no longer available"
+    )))
 }
 
 fn geometry_from_monitor(monitor: &Monitor) -> Result<MonitorGeometry, CaptureError> {
-    let monitor_id = monitor.id().map_err(|e| CaptureError::Capture(e.to_string()))?;
-    let monitor_x = monitor.x().map_err(|e| CaptureError::Capture(e.to_string()))?;
-    let monitor_y = monitor.y().map_err(|e| CaptureError::Capture(e.to_string()))?;
+    let monitor_id = monitor
+        .id()
+        .map_err(|e| CaptureError::Capture(e.to_string()))?;
+    let monitor_x = monitor
+        .x()
+        .map_err(|e| CaptureError::Capture(e.to_string()))?;
+    let monitor_y = monitor
+        .y()
+        .map_err(|e| CaptureError::Capture(e.to_string()))?;
     let logical_width = monitor
         .width()
         .map_err(|e| CaptureError::Capture(e.to_string()))?;

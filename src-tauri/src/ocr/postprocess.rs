@@ -18,11 +18,7 @@ const PREAMBLES: &[&str] = &[
     "Dưới đây",
 ];
 
-const SIGNOFFS: &[&str] = &[
-    "Let me know",
-    "Hope this helps",
-    "Feel free to",
-];
+const SIGNOFFS: &[&str] = &["Let me know", "Hope this helps", "Feel free to"];
 
 fn opening_fence_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -74,7 +70,9 @@ fn strip_thinking_transcript(raw: &str) -> String {
     let content_re = ocr_content_start_re();
     if let Some(m) = content_re.find(raw) {
         let before = &raw[..m.start()];
-        let last_boundary = before.rfind("\n\n").map(|i| i + 2)
+        let last_boundary = before
+            .rfind("\n\n")
+            .map(|i| i + 2)
             .or_else(|| before.rfind('\n').map(|i| i + 1))
             .unwrap_or(m.start());
         return raw[last_boundary..].to_string();
@@ -108,11 +106,15 @@ fn find_outermost_tabulars(text: &str) -> Vec<(usize, usize, usize, usize)> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
-        let Some(start_rel) = text[i..].find("\\begin{tabular}") else { break };
+        let Some(start_rel) = text[i..].find("\\begin{tabular}") else {
+            break;
+        };
         let span_start = i + start_rel;
         // Skip past the column spec `{...}` that follows.
         let after_begin = span_start + "\\begin{tabular}".len();
-        let Some(spec_end_rel) = text[after_begin..].find('}') else { break };
+        let Some(spec_end_rel) = text[after_begin..].find('}') else {
+            break;
+        };
         let body_start = after_begin + spec_end_rel + 1;
         // Walk forward, tracking nested \begin{tabular} depth.
         let mut depth = 1usize;
@@ -179,9 +181,7 @@ fn normalize_latex_to_markdown(raw: &str) -> String {
         // Normalise the prose between previous span and this one.
         s.push_str(&normalize_outside_tabular(&raw[cursor..span_start]));
         let body = &raw[body_start..body_end];
-        if body.contains("\\multirow")
-            || body.contains("\\multicolumn")
-            || body.contains("\\cline")
+        if body.contains("\\multirow") || body.contains("\\multicolumn") || body.contains("\\cline")
         {
             s.push_str(&raw[span_start..span_end]); // preserve verbatim
         } else {
@@ -229,9 +229,7 @@ fn latex_enumerate_to_md(body: &str) -> String {
 }
 
 fn latex_tabular_to_md_table(body: &str) -> String {
-    let cleaned = body
-        .replace("\\hline", "")
-        .replace("\\\\", "\n");
+    let cleaned = body.replace("\\hline", "").replace("\\\\", "\n");
 
     let rows: Vec<&str> = cleaned
         .lines()
@@ -420,7 +418,8 @@ mod tests {
 
     #[test]
     fn strips_thinking_before_latex() {
-        let input = "42>thought\nI need to extract the equation.\n\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$";
+        let input =
+            "42>thought\nI need to extract the equation.\n\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$";
         let result = post_process(input);
         assert!(result.starts_with("$$\\int"), "got: {result}");
     }
@@ -444,7 +443,10 @@ mod tests {
         let input = "\\textbf{Câu 12.} Một vườn thú ghi lại tuổi của 20 con hổ\n\\begin{center}\n\\begin{tabular}{|l|c|c|c|c|c|}\n\\hline\nTuổi thọ ( năm) & [14;15) & [15;16) & [16;17) & [17;18) & [18;19) \\\\\\hline\nSố con hổ & 1 & 3 & 8 & 6 & 2 \\\\\\hline\n\\end{tabular}\n\\end{center}\nKhoảng biến thiên của mẫu số liệu trên bảng\n\\par\n\\textbf{A.} 6. \\hspace{2cm} \\textbf{B.} 8. \\hspace{2cm} \\textbf{C.} 5. \\hspace{2cm} \\textbf{D.} 7.";
         let result = post_process(input);
         assert!(result.contains("**Câu 12.**"), "missing bold: {result}");
-        assert!(result.contains("| Tuổi thọ ( năm) |"), "missing table: {result}");
+        assert!(
+            result.contains("| Tuổi thọ ( năm) |"),
+            "missing table: {result}"
+        );
         assert!(result.contains("| --- |"), "missing separator: {result}");
         assert!(result.contains("**A.** 6."), "missing options: {result}");
         assert!(!result.contains("\\textbf"), "raw latex leaked: {result}");
@@ -470,18 +472,33 @@ mod tests {
         // columns. Postprocess MUST NOT flatten this to a MD grid.
         let input = "\\begin{tabular}{|c|c|c|c|}\n\\hline \\multirow{2}{*}{ Nhóm } & \\multirow{2}{*}{Số máy mỗi nhóm} & \\multicolumn{2}{|c|}{Số máy trong từng nhóm} \\\\\n\\cline { 3 - 4 } & & Loại I & Loại II \\\\\n\\hline$A$ & 10 & 2 & 2 \\\\\n\\hline\n\\end{tabular}";
         let result = post_process(input);
-        assert!(result.contains("\\multirow{2}{*}{ Nhóm }"), "multirow lost: {result}");
-        assert!(result.contains("\\multicolumn{2}{|c|}"), "multicolumn lost: {result}");
+        assert!(
+            result.contains("\\multirow{2}{*}{ Nhóm }"),
+            "multirow lost: {result}"
+        );
+        assert!(
+            result.contains("\\multicolumn{2}{|c|}"),
+            "multicolumn lost: {result}"
+        );
         assert!(result.contains("\\cline"), "cline lost: {result}");
-        assert!(result.contains("\\begin{tabular}"), "tabular env lost: {result}");
-        assert!(!result.contains("| Nhóm |"), "should not have flattened to MD: {result}");
+        assert!(
+            result.contains("\\begin{tabular}"),
+            "tabular env lost: {result}"
+        );
+        assert!(
+            !result.contains("| Nhóm |"),
+            "should not have flattened to MD: {result}"
+        );
     }
 
     #[test]
     fn strips_gemini_cli_ripgrep_and_yolo_lines() {
         let input = "Ripgrep is not available. Falling back to GrepTool.\nYOLO mode is enabled. All tool calls will be automatically approved.\n\n| a | b |\n|---|---|\n| 1 | 2 |";
         let result = post_process(input);
-        assert!(result.starts_with("| a | b |"), "infra lines leaked: {result}");
+        assert!(
+            result.starts_with("| a | b |"),
+            "infra lines leaked: {result}"
+        );
         assert!(!result.contains("Ripgrep"), "ripgrep leak: {result}");
         assert!(!result.contains("YOLO"), "yolo leak: {result}");
     }
@@ -501,10 +518,19 @@ mod tests {
         // corrupt the multirow/multicolumn header arguments.
         let inner_count = result.matches("\\begin{tabular}{c}").count();
         assert_eq!(inner_count, 2, "lost nested tabulars: {result}");
-        assert!(result.contains("\\multirow{2}{*}{\\begin{tabular}{c}Số máy mỗi"), "multirow header mangled: {result}");
-        assert!(result.contains("\\multicolumn{2}{|c|}{\\begin{tabular}{c}Số máy trong"), "multicolumn header mangled: {result}");
+        assert!(
+            result.contains("\\multirow{2}{*}{\\begin{tabular}{c}Số máy mỗi"),
+            "multirow header mangled: {result}"
+        );
+        assert!(
+            result.contains("\\multicolumn{2}{|c|}{\\begin{tabular}{c}Số máy trong"),
+            "multicolumn header mangled: {result}"
+        );
         // Must NOT contain the flatten artefacts of latex_tabular_to_md_table.
-        assert!(!result.contains("| Số máy trong từng nhóm |"), "inner tabular got flattened: {result}");
+        assert!(
+            !result.contains("| Số máy trong từng nhóm |"),
+            "inner tabular got flattened: {result}"
+        );
     }
 
     #[test]
@@ -516,7 +542,10 @@ mod tests {
         let result = post_process(input);
         assert!(result.contains("| Name |"), "did not flatten: {result}");
         assert!(result.contains("| --- |"), "no separator: {result}");
-        assert!(!result.contains("\\begin{tabular}"), "raw latex leaked: {result}");
+        assert!(
+            !result.contains("\\begin{tabular}"),
+            "raw latex leaked: {result}"
+        );
     }
 
     #[test]

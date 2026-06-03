@@ -42,7 +42,9 @@ fn init_runs_migration_creates_tables() {
         )
         .unwrap();
     assert_eq!(count, 2);
-    let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    let version: i32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(version, 1);
 }
 
@@ -89,13 +91,7 @@ fn search_with_special_chars_does_not_crash_fts_parser() {
     let conn = store.conn.lock().unwrap();
     history::insert(&conn, &new_record("a", 100, "frac x y")).unwrap();
     // FTS5 MATCH operators that would otherwise blow up: NEAR, ^, *, AND
-    let raw_queries = [
-        "NEAR(a b)",
-        "frac AND y",
-        "a^b",
-        "*literal",
-        "\"quotes\"",
-    ];
+    let raw_queries = ["NEAR(a b)", "frac AND y", "a^b", "*literal", "\"quotes\""];
     for q in raw_queries {
         history::search(&conn, q, 10).expect("query should not error");
     }
@@ -126,8 +122,7 @@ fn update_output_replaces_text_and_keeps_fts_in_sync() {
         history::update_output(&conn, id, "fresh phrase", "gemini-cli", "MIXED", 999).unwrap();
     assert_eq!(updated, 1);
 
-    let missing =
-        history::update_output(&conn, 99999, "x", "y", "MIXED", 1).unwrap();
+    let missing = history::update_output(&conn, 99999, "x", "y", "MIXED", 1).unwrap();
     assert_eq!(missing, 0);
 
     let rec = history::find_by_id(&conn, id).unwrap().unwrap();

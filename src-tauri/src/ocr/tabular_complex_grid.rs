@@ -47,7 +47,10 @@ pub(super) fn convert_flattened_complex_grid(
     }
 
     let mut out = String::new();
-    out.push_str(&format!("\\begin{{tabular}}{{{}}}\n\\hline\n", centered_spec(col_count)));
+    out.push_str(&format!(
+        "\\begin{{tabular}}{{{}}}\n\\hline\n",
+        centered_spec(col_count)
+    ));
 
     let mut first_row = Vec::new();
     for cell in &top[..span_start] {
@@ -104,9 +107,14 @@ fn convert_title_span_grid(
     }
 
     let mut out = String::new();
-    out.push_str(&format!("\\begin{{tabular}}{{{}}}\n", title_span_spec(col_count)));
+    out.push_str(&format!(
+        "\\begin{{tabular}}{{{}}}\n",
+        title_span_spec(col_count)
+    ));
     out.push_str("\\hline\n");
-    out.push_str(&format!("\\multicolumn{{{col_count}}}{{|c|}}{{{title}}} \\\\\n"));
+    out.push_str(&format!(
+        "\\multicolumn{{{col_count}}}{{|c|}}{{{title}}} \\\\\n"
+    ));
     out.push_str("\\hline\n");
     out.push_str(&join_clean_cells(&labels));
     out.push_str(" \\\\\n\\hline\n");
@@ -178,7 +186,10 @@ fn header_cell(cell: &str) -> String {
         return clean;
     }
     let lines = split_header_lines(&words);
-    format!("\\begin{{tabular}}{{c}}{}\\end{{tabular}}", lines.join("\\\\"))
+    format!(
+        "\\begin{{tabular}}{{c}}{}\\end{{tabular}}",
+        lines.join("\\\\")
+    )
 }
 
 fn split_header_lines<'a>(words: &[&'a str]) -> Vec<String> {
@@ -188,7 +199,10 @@ fn split_header_lines<'a>(words: &[&'a str]) -> Vec<String> {
         }
     }
     if words.len() <= 4 {
-        return vec![words[..words.len() - 1].join(" "), words[words.len() - 1].into()];
+        return vec![
+            words[..words.len() - 1].join(" "),
+            words[words.len() - 1].into(),
+        ];
     }
     let mid = (words.len() + 1) / 2;
     vec![words[..mid].join(" "), words[mid..].join(" ")]

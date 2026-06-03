@@ -28,17 +28,13 @@ mod ffi {
     pub const K_CGPDF_MEDIA_BOX: i32 = 0;
 
     unsafe extern "C" {
-        pub fn CGPDFDocumentCreateWithURL(url: *const std::ffi::c_void)
-            -> CGPDFDocumentRef;
+        pub fn CGPDFDocumentCreateWithURL(url: *const std::ffi::c_void) -> CGPDFDocumentRef;
         pub fn CGPDFDocumentRelease(document: CGPDFDocumentRef);
         pub fn CGPDFDocumentGetNumberOfPages(document: CGPDFDocumentRef) -> usize;
         pub fn CGPDFDocumentGetPage(document: CGPDFDocumentRef, page_number: usize)
             -> CGPDFPageRef;
         pub fn CGPDFPageGetBoxRect(page: CGPDFPageRef, box_type: i32) -> CGRect;
-        pub fn CGContextDrawPDFPage(
-            context: core_graphics::sys::CGContextRef,
-            page: CGPDFPageRef,
-        );
+        pub fn CGContextDrawPDFPage(context: core_graphics::sys::CGContextRef, page: CGPDFPageRef);
     }
 }
 
@@ -64,9 +60,7 @@ impl PdfDocument {
     fn open(path: &str) -> Result<Self, PdfRenderError> {
         let url = CFURL::from_path(Path::new(path), false)
             .ok_or_else(|| PdfRenderError::Open(format!("invalid path: {path}")))?;
-        let doc = unsafe {
-            ffi::CGPDFDocumentCreateWithURL(url.as_concrete_TypeRef() as *const _)
-        };
+        let doc = unsafe { ffi::CGPDFDocumentCreateWithURL(url.as_concrete_TypeRef() as *const _) };
         if doc.is_null() {
             return Err(PdfRenderError::Open(format!("cannot open: {path}")));
         }
@@ -79,7 +73,11 @@ impl PdfDocument {
 
     fn page(&self, number: usize) -> Option<ffi::CGPDFPageRef> {
         let p = unsafe { ffi::CGPDFDocumentGetPage(self.ptr, number) };
-        if p.is_null() { None } else { Some(p) }
+        if p.is_null() {
+            None
+        } else {
+            Some(p)
+        }
     }
 }
 
@@ -108,12 +106,9 @@ pub fn render_pages_to_pngs(
     let mut paths = Vec::with_capacity(count);
 
     for i in 1..=count {
-        let page = doc
-            .page(i)
-            .ok_or(PdfRenderError::PageOutOfRange(i))?;
+        let page = doc.page(i).ok_or(PdfRenderError::PageOutOfRange(i))?;
 
-        let media_box =
-            unsafe { ffi::CGPDFPageGetBoxRect(page, ffi::K_CGPDF_MEDIA_BOX) };
+        let media_box = unsafe { ffi::CGPDFPageGetBoxRect(page, ffi::K_CGPDF_MEDIA_BOX) };
         let w = (media_box.size.width * scale).ceil() as usize;
         let h = (media_box.size.height * scale).ceil() as usize;
 
@@ -224,8 +219,7 @@ startxref
 
     #[test]
     fn nonexistent_pdf_returns_open_error() {
-        let result =
-            render_pages_to_pngs("/tmp/does-not-exist.pdf", Path::new("/tmp"), None);
+        let result = render_pages_to_pngs("/tmp/does-not-exist.pdf", Path::new("/tmp"), None);
         assert!(matches!(result, Err(PdfRenderError::Open(_))));
     }
 

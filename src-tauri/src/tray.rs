@@ -51,7 +51,8 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
         .accelerator("CmdOrCtrl+Shift+M")
         .build(app)?;
     let show_history = MenuItemBuilder::with_id(MENU_SHOW_HISTORY, "Show History").build(app)?;
-    let open_settings = MenuItemBuilder::with_id(MENU_OPEN_SETTINGS, "Open Settings…").build(app)?;
+    let open_settings =
+        MenuItemBuilder::with_id(MENU_OPEN_SETTINGS, "Open Settings…").build(app)?;
     let about = MenuItemBuilder::with_id(MENU_ABOUT, "About SnipTeX").build(app)?;
     let quit = MenuItemBuilder::with_id(MENU_QUIT, "Quit SnipTeX")
         .accelerator("CmdOrCtrl+Q")
@@ -112,10 +113,7 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
     let tray = builder.build(app)?;
 
     if let Some(state) = app.try_state::<AppState>() {
-        let mut handle = state
-            .tray_handle
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let mut handle = state.tray_handle.lock().unwrap_or_else(|p| p.into_inner());
         *handle = Some(tray);
     }
 
@@ -125,7 +123,9 @@ pub fn init_tray(app: &AppHandle) -> tauri::Result<()> {
 /// Swap the tray icon + tooltip to reflect a new status. Also updates
 /// the cached status in `AppState`. Cheap to call from any thread.
 pub fn set_status(app: &AppHandle, status: TrayStatus) {
-    let Some(state) = app.try_state::<AppState>() else { return };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
 
     {
         let mut cur = state
@@ -138,11 +138,10 @@ pub fn set_status(app: &AppHandle, status: TrayStatus) {
         *cur = status;
     }
 
-    let handle_guard = state
-        .tray_handle
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    let Some(tray) = handle_guard.as_ref() else { return };
+    let handle_guard = state.tray_handle.lock().unwrap_or_else(|p| p.into_inner());
+    let Some(tray) = handle_guard.as_ref() else {
+        return;
+    };
 
     if let Ok(icon) = icon_for(status) {
         let _ = tray.set_icon(Some(icon));

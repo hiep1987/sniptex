@@ -46,8 +46,7 @@ pub fn make_thumbnail(src_png: &Path, dst_webp: &Path) -> Result<(), ThumbnailEr
     let encoder = webp::Encoder::from_rgba(rgba.as_raw(), w, h);
     let webp_bytes = encoder.encode(THUMB_QUALITY);
 
-    std::fs::write(dst_webp, &*webp_bytes)
-        .map_err(|e| ThumbnailError::WriteWebp(e.to_string()))?;
+    std::fs::write(dst_webp, &*webp_bytes).map_err(|e| ThumbnailError::WriteWebp(e.to_string()))?;
 
     Ok(())
 }

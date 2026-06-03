@@ -153,8 +153,7 @@ pub async fn chat_with_media(
         // Read frames until the `res` matching id=2 arrives. Ignore evt frames,
         // pings/pongs, and the `connect` ack (id=1).
         while let Some(frame) = reader.next().await {
-            let msg =
-                frame.map_err(|e| CloudGoclawError::Network(redact_key(&e.to_string())))?;
+            let msg = frame.map_err(|e| CloudGoclawError::Network(redact_key(&e.to_string())))?;
             let text = match msg {
                 Message::Text(t) => t,
                 Message::Binary(_) | Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {

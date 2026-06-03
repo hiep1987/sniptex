@@ -242,12 +242,10 @@ D. $V = \int_0^5 (x^2 + 3)^2 dx.$"#;
 
     #[test]
     fn accepts_multi_question_crop_when_expected_label_is_present() {
-        let previous = format!(
-            "{CAU_9}\n\nCâu 10. Cho hàm số $f(x)=x^2$. Tính đạo hàm của hàm số tại $x=1$."
-        );
-        let candidate = format!(
-            "{CAU_9}\n\nCâu 10. Cho hàm số $f(x)=x^2$. Tính đạo hàm của hàm số tại $x=1$."
-        );
+        let previous =
+            format!("{CAU_9}\n\nCâu 10. Cho hàm số $f(x)=x^2$. Tính đạo hàm của hàm số tại $x=1$.");
+        let candidate =
+            format!("{CAU_9}\n\nCâu 10. Cho hàm số $f(x)=x^2$. Tính đạo hàm của hàm số tại $x=1$.");
 
         assert!(validate_rerun_consistency(&previous, &candidate).is_ok());
     }

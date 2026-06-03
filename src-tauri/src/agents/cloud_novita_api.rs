@@ -74,12 +74,8 @@ struct ChatMessage<'a> {
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ContentPart<'a> {
-    Text {
-        text: &'a str,
-    },
-    ImageUrl {
-        image_url: ImageUrl,
-    },
+    Text { text: &'a str },
+    ImageUrl { image_url: ImageUrl },
 }
 
 #[derive(Serialize)]
@@ -144,10 +140,8 @@ fn clean_grounding_output(s: &str) -> String {
     let marker_re = MARKER_RE.get_or_init(|| {
         Regex::new(r"(?m)^(?:text|image|title|figure|table|list)\[\[[^\]]+\]\]\s*\n?").unwrap()
     });
-    let inline_re = INLINE_MATH_RE
-        .get_or_init(|| Regex::new(r"\\\((.*?)\\\)").unwrap());
-    let display_re = DISPLAY_MATH_RE
-        .get_or_init(|| Regex::new(r"(?s)\\\[(.*?)\\\]").unwrap());
+    let inline_re = INLINE_MATH_RE.get_or_init(|| Regex::new(r"\\\((.*?)\\\)").unwrap());
+    let display_re = DISPLAY_MATH_RE.get_or_init(|| Regex::new(r"(?s)\\\[(.*?)\\\]").unwrap());
 
     let no_markers = marker_re.replace_all(s, "");
     let inline_fixed = inline_re.replace_all(&no_markers, |c: &regex::Captures| {
@@ -164,10 +158,8 @@ pub fn redact_key(s: &str) -> String {
     use std::sync::OnceLock;
     static BEARER_RE: OnceLock<Regex> = OnceLock::new();
     static SK_RE: OnceLock<Regex> = OnceLock::new();
-    let bearer_re =
-        BEARER_RE.get_or_init(|| Regex::new(r"(?i)bearer\s+[0-9A-Za-z._\-]+").unwrap());
-    let sk_re = SK_RE
-        .get_or_init(|| Regex::new(r"\bsk_[0-9A-Za-z._\-]{12,}\b").unwrap());
+    let bearer_re = BEARER_RE.get_or_init(|| Regex::new(r"(?i)bearer\s+[0-9A-Za-z._\-]+").unwrap());
+    let sk_re = SK_RE.get_or_init(|| Regex::new(r"\bsk_[0-9A-Za-z._\-]{12,}\b").unwrap());
     let without_bearer = bearer_re.replace_all(s, "Bearer <redacted>");
     sk_re
         .replace_all(&without_bearer, "<redacted-novita-key>")
@@ -208,7 +200,9 @@ async fn call_with_timeout(
                 ContentPart::ImageUrl {
                     image_url: ImageUrl { url: data_uri },
                 },
-                ContentPart::Text { text: NOVITA_PROMPT },
+                ContentPart::Text {
+                    text: NOVITA_PROMPT,
+                },
             ],
         }],
         max_tokens: MAX_TOKENS,
@@ -286,10 +280,7 @@ mod tests {
     fn clean_grounding_output_strips_multiple_marker_types_and_display_math() {
         let raw = "text[[0, 0, 100, 100]]\nIntro.\nimage[[10, 20, 30, 40]]\n\\[ \\int_0^1 x dx = \\frac{1}{2} \\]\nEnd.";
         let cleaned = clean_grounding_output(raw);
-        assert_eq!(
-            cleaned,
-            "Intro.\n$$\\int_0^1 x dx = \\frac{1}{2}$$\nEnd."
-        );
+        assert_eq!(cleaned, "Intro.\n$$\\int_0^1 x dx = \\frac{1}{2}$$\nEnd.");
     }
 
     #[test]
@@ -325,10 +316,7 @@ mod tests {
     #[test]
     fn redact_bearer_token() {
         let raw = "Authorization: Bearer sk_test_secret_value failed";
-        assert_eq!(
-            redact_key(raw),
-            "Authorization: Bearer <redacted> failed"
-        );
+        assert_eq!(redact_key(raw), "Authorization: Bearer <redacted> failed");
     }
 
     #[test]

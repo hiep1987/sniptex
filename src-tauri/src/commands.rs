@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    path::BaseDirectory, AppHandle, EventId, Emitter, Listener, LogicalPosition, LogicalSize,
+    path::BaseDirectory, AppHandle, Emitter, EventId, Listener, LogicalPosition, LogicalSize,
     Manager, State, WebviewWindow,
 };
 #[cfg(desktop)]
@@ -161,9 +161,7 @@ pub fn delete_api_key(provider: String) -> Result<(), String> {
         "gemini" => keychain::delete(keychain::GEMINI_ACCOUNT).map_err(|e| e.to_string()),
         "mistral" => keychain::delete(keychain::MISTRAL_ACCOUNT).map_err(|e| e.to_string()),
         "novita" => keychain::delete(keychain::NOVITA_ACCOUNT).map_err(|e| e.to_string()),
-        "goclaw" => {
-            keychain::delete(keychain::CLOUD_GOCLAW_ACCOUNT).map_err(|e| e.to_string())
-        }
+        "goclaw" => keychain::delete(keychain::CLOUD_GOCLAW_ACCOUNT).map_err(|e| e.to_string()),
         other => Err(format!("unsupported provider: {other}")),
     }
 }
@@ -192,34 +190,26 @@ pub async fn test_api_key(
     let image_path_str = image_path.to_string_lossy().to_string();
 
     let text = match provider.as_str() {
-        "gemini" => cloud_gemini_api::call_with_image_path(
-            &image_path_str,
-            ocr::MASTER_PROMPT,
-            trimmed,
-        )
-        .await
-        .map_err(|e| e.to_string())?,
-        "mistral" => cloud_mistral_api::call_with_image_path(
-            &image_path_str,
-            ocr::MASTER_PROMPT,
-            trimmed,
-        )
-        .await
-        .map_err(|e| e.to_string())?,
-        "novita" => cloud_novita_api::call_with_image_path(
-            &image_path_str,
-            ocr::MASTER_PROMPT,
-            trimmed,
-        )
-        .await
-        .map_err(|e| e.to_string())?,
-        "goclaw" => cloud_goclaw_api::call_with_image_path(
-            &image_path_str,
-            ocr::MASTER_PROMPT,
-            trimmed,
-        )
-        .await
-        .map_err(|e| e.to_string())?,
+        "gemini" => {
+            cloud_gemini_api::call_with_image_path(&image_path_str, ocr::MASTER_PROMPT, trimmed)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "mistral" => {
+            cloud_mistral_api::call_with_image_path(&image_path_str, ocr::MASTER_PROMPT, trimmed)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "novita" => {
+            cloud_novita_api::call_with_image_path(&image_path_str, ocr::MASTER_PROMPT, trimmed)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "goclaw" => {
+            cloud_goclaw_api::call_with_image_path(&image_path_str, ocr::MASTER_PROMPT, trimmed)
+                .await
+                .map_err(|e| e.to_string())?
+        }
         other => return Err(format!("unsupported provider: {other}")),
     };
 
@@ -244,16 +234,13 @@ pub async fn test_api_key(
 /// re-OCR the same image with a different agent) and a `HistoryRecord`
 /// row is inserted. On `cancelled` no screenshot is written.
 #[tauri::command]
-pub async fn run_snip(
-    app: AppHandle,
-    agent_id: Option<String>,
-) -> Result<SnipResult, String> {
+pub async fn run_snip(app: AppHandle, agent_id: Option<String>) -> Result<SnipResult, String> {
     // Rust-side re-entrancy guard: a second hotkey press while a snip is
     // in flight would race two overlay show()s on the single shared window.
     // The frontend has a ref-guard too, but devtools could call run_snip
     // directly — defense in depth.
-    let _busy = SnipBusyGuard::try_acquire()
-        .ok_or_else(|| "snip already in progress".to_string())?;
+    let _busy =
+        SnipBusyGuard::try_acquire().ok_or_else(|| "snip already in progress".to_string())?;
 
     // Hide visible SnipTeX surfaces before showing the selector so the
     // user can select content behind them. The screenshot itself is now
@@ -283,10 +270,7 @@ pub async fn run_snip(
     result
 }
 
-async fn run_snip_inner(
-    app: &AppHandle,
-    agent_id: Option<String>,
-) -> Result<SnipResult, String> {
+async fn run_snip_inner(app: &AppHandle, agent_id: Option<String>) -> Result<SnipResult, String> {
     // `cursor_position` returns physical pixels scaled by the PRIMARY
     // monitor's DPI factor (tao at macos/util/mod.rs:107). xcap's
     // `Monitor::from_point` (and `CGGetDisplaysWithPoint` under it) uses
@@ -406,8 +390,7 @@ fn persist_to_history(
     // history lives under app-data — often different volumes on Windows),
     // fall back to copy + remove otherwise.
     if std::fs::rename(cropped_path, &image_dst).is_err() {
-        std::fs::copy(cropped_path, &image_dst)
-            .map_err(|e| format!("copy cropped png: {e}"))?;
+        std::fs::copy(cropped_path, &image_dst).map_err(|e| format!("copy cropped png: {e}"))?;
         let _ = std::fs::remove_file(cropped_path);
     }
 
@@ -560,9 +543,7 @@ async fn show_overlay_and_await_selection(
     overlay
         .emit(CAPTURE_START_EVENT, &payload)
         .map_err(|e| format!("emit capture-start: {e}"))?;
-    overlay
-        .show()
-        .map_err(|e| format!("overlay show: {e}"))?;
+    overlay.show().map_err(|e| format!("overlay show: {e}"))?;
     let _ = overlay.set_focus();
 
     match tokio::time::timeout(SELECTION_TIMEOUT, rx).await {
@@ -622,7 +603,12 @@ struct SelectionRectPayload {
 
 impl From<SelectionRectPayload> for SelectionRect {
     fn from(p: SelectionRectPayload) -> Self {
-        SelectionRect { x: p.x, y: p.y, w: p.w, h: p.h }
+        SelectionRect {
+            x: p.x,
+            y: p.y,
+            w: p.w,
+            h: p.h,
+        }
     }
 }
 
@@ -967,7 +953,9 @@ fn pick_agent<'a>(
                 return Ok(a);
             }
         }
-        installed.first().ok_or_else(|| "no agents available".into())
+        installed
+            .first()
+            .ok_or_else(|| "no agents available".into())
     }
 }
 
@@ -1004,8 +992,8 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
 
     match agent.spec.id {
         CLOUD_GEMINI_ID => {
-            let key = keychain::get_gemini_api_key()
-                .map_err(|_| "missing Gemini API key".to_string())?;
+            let key =
+                keychain::get_gemini_api_key().map_err(|_| "missing Gemini API key".to_string())?;
             cloud_gemini_api::call_with_pdf_path(pdf_path, ocr::MASTER_PROMPT, &key)
                 .await
                 .map_err(|e| e.to_string())
@@ -1017,7 +1005,10 @@ async fn run_cloud_pdf_ocr(agent: &AgentInfo, pdf_path: &str) -> Result<String, 
                 .await
                 .map_err(|e| e.to_string())
         }
-        _ => Err(format!("cloud agent {} does not support PDF", agent.spec.id)),
+        _ => Err(format!(
+            "cloud agent {} does not support PDF",
+            agent.spec.id
+        )),
     }
 }
 
@@ -1074,8 +1065,7 @@ async fn run_per_page_pdf_ocr(
     let tmp_dir = std::env::temp_dir()
         .join("sniptex")
         .join(format!("pdf-pages-{}", Uuid::new_v4()));
-    std::fs::create_dir_all(&tmp_dir)
-        .map_err(|e| format!("create temp dir: {e}"))?;
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("create temp dir: {e}"))?;
     let _cleanup = TempDirGuard(tmp_dir.clone());
 
     let render_started = Instant::now();
@@ -1105,9 +1095,7 @@ async fn run_per_page_pdf_ocr(
     let overall_budget = per_page.saturating_mul(total as u32);
 
     let max_concurrent = pdf_page_concurrency(agent_id).max(1);
-    log::info!(
-        "[pdf-ocr] dispatching {total} page(s) with concurrency={max_concurrent}"
-    );
+    log::info!("[pdf-ocr] dispatching {total} page(s) with concurrency={max_concurrent}");
 
     let sem = Arc::new(Semaphore::new(max_concurrent));
     let done_counter = Arc::new(AtomicUsize::new(0));
@@ -1204,18 +1192,15 @@ fn persist_pdf_to_history(
 
     // Copy PDF into history images dir so reruns work
     let image_dst = images_dir.join(format!("{uuid_str}.pdf"));
-    std::fs::copy(pdf_path, &image_dst)
-        .map_err(|e| format!("copy pdf to history: {e}"))?;
+    std::fs::copy(pdf_path, &image_dst).map_err(|e| format!("copy pdf to history: {e}"))?;
 
     // Render first page as thumbnail
     let thumb_dst = thumbs_dir.join(format!("{uuid_str}.webp"));
-    let thumb_tmp = std::env::temp_dir().join("sniptex").join(format!("{uuid_str}-thumb"));
+    let thumb_tmp = std::env::temp_dir()
+        .join("sniptex")
+        .join(format!("{uuid_str}-thumb"));
     let _ = std::fs::create_dir_all(&thumb_tmp);
-    let thumb_result = ocr::pdf_render::render_pages_to_pngs(
-        pdf_path,
-        &thumb_tmp,
-        Some(72.0),
-    );
+    let thumb_result = ocr::pdf_render::render_pages_to_pngs(pdf_path, &thumb_tmp, Some(72.0));
     match thumb_result {
         Ok(pages) if !pages.is_empty() => {
             if let Err(e) = storage::thumbnail::make_thumbnail(&pages[0], &thumb_dst) {
@@ -1248,8 +1233,8 @@ fn persist_pdf_to_history(
 
     let conn = store.conn.lock().map_err(|e| format!("db lock: {e}"))?;
     let id = history_repo::insert(&conn, &new_record).map_err(|e| e.to_string())?;
-    let evicted = history_repo::enforce_max_records(&conn, DEFAULT_MAX_RECORDS)
-        .map_err(|e| e.to_string())?;
+    let evicted =
+        history_repo::enforce_max_records(&conn, DEFAULT_MAX_RECORDS).map_err(|e| e.to_string())?;
     drop(conn);
     for (img, thumb) in evicted {
         storage::remove_file_if_exists(&img);
@@ -1487,10 +1472,7 @@ pub fn update_settings(
 }
 
 #[tauri::command]
-pub fn rebind_hotkey(
-    app: AppHandle,
-    new_shortcut: String,
-) -> Result<(), String> {
+pub fn rebind_hotkey(app: AppHandle, new_shortcut: String) -> Result<(), String> {
     #[cfg(desktop)]
     {
         crate::hotkey::rebind(&app, &new_shortcut)?;
@@ -1508,17 +1490,18 @@ pub fn rebind_hotkey(
 }
 
 #[tauri::command]
-pub fn set_launch_at_login(
-    app: AppHandle,
-    enabled: bool,
-) -> Result<(), String> {
+pub fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
     #[cfg(desktop)]
     {
         let autostart = app.autolaunch();
         if enabled {
-            autostart.enable().map_err(|e| format!("enable autostart: {e}"))?;
+            autostart
+                .enable()
+                .map_err(|e| format!("enable autostart: {e}"))?;
         } else {
-            autostart.disable().map_err(|e| format!("disable autostart: {e}"))?;
+            autostart
+                .disable()
+                .map_err(|e| format!("disable autostart: {e}"))?;
         }
         let settings_store = app.state::<SettingsStore>();
         settings_store.update(SettingsPatch {

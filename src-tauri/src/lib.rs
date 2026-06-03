@@ -72,8 +72,7 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .expect("app_data_dir resolvable on desktop");
-            let history_store = storage::init(&app_data_dir)
-                .expect("storage init failed");
+            let history_store = storage::init(&app_data_dir).expect("storage init failed");
             app.manage(history_store);
 
             let settings_store = settings::SettingsStore::load(app.handle());
@@ -133,7 +132,11 @@ pub fn run() {
             // default does nothing and the user thinks the app is dead.
             // Re-show the main window so the user has somewhere to land.
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { has_visible_windows, .. } = event {
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } = event
+            {
                 if !has_visible_windows {
                     if let Some(main) = app.get_webview_window("main") {
                         let _ = main.show();

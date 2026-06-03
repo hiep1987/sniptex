@@ -98,11 +98,9 @@ pub fn redact_key(s: &str) -> String {
     use std::sync::OnceLock;
     static BEARER_RE: OnceLock<Regex> = OnceLock::new();
     static BARE_KEY_RE: OnceLock<Regex> = OnceLock::new();
-    let bearer_re =
-        BEARER_RE.get_or_init(|| Regex::new(r"(?i)bearer\s+[0-9A-Za-z._\-]+").unwrap());
+    let bearer_re = BEARER_RE.get_or_init(|| Regex::new(r"(?i)bearer\s+[0-9A-Za-z._\-]+").unwrap());
     let bare_key_re = BARE_KEY_RE.get_or_init(|| {
-        Regex::new(r"\b(?:sk-[0-9A-Za-z._\-]{12,}|[0-9A-Za-z]{3,}_[0-9A-Za-z._\-]{20,})\b")
-            .unwrap()
+        Regex::new(r"\b(?:sk-[0-9A-Za-z._\-]{12,}|[0-9A-Za-z]{3,}_[0-9A-Za-z._\-]{20,})\b").unwrap()
     });
     let without_bearer = bearer_re.replace_all(s, "Bearer <redacted>");
     bare_key_re
@@ -170,10 +168,7 @@ async fn call_with_timeout(
             code if status.is_server_error() => {
                 CloudMistralError::ServerError(code, redact_key(&text))
             }
-            code => CloudMistralError::BadRequest(format!(
-                "HTTP {code}: {}",
-                redact_key(&text)
-            )),
+            code => CloudMistralError::BadRequest(format!("HTTP {code}: {}", redact_key(&text))),
         });
     }
 
@@ -222,10 +217,7 @@ mod tests {
     fn test_redact_lowercase_bearer_and_bare_key() {
         let raw = "auth bearer abc_1234567890123456789012345 raw abc_1234567890123456789012345";
         let cleaned = redact_key(raw);
-        assert_eq!(
-            cleaned,
-            "auth Bearer <redacted> raw <redacted-mistral-key>"
-        );
+        assert_eq!(cleaned, "auth Bearer <redacted> raw <redacted-mistral-key>");
     }
 
     #[test]
@@ -241,7 +233,8 @@ mod tests {
 
     #[test]
     fn parse_response_concatenates_all_pages() {
-        let json = r#"{"pages":[{"markdown":"page 1"},{"markdown":"page 2"},{"markdown":"page 3"}]}"#;
+        let json =
+            r#"{"pages":[{"markdown":"page 1"},{"markdown":"page 2"},{"markdown":"page 3"}]}"#;
         let result = parse_response(json).unwrap();
         assert_eq!(result, "page 1\n\npage 2\n\npage 3");
     }

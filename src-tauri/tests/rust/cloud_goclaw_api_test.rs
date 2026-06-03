@@ -72,7 +72,8 @@ fn parse_chat_response_propagates_unauthorized() {
 
 #[test]
 fn parse_chat_response_propagates_not_found() {
-    let frame = r#"{"type":"res","id":"2","ok":false,"error":{"code":"NOT_FOUND","message":"no agent"}}"#;
+    let frame =
+        r#"{"type":"res","id":"2","ok":false,"error":{"code":"NOT_FOUND","message":"no agent"}}"#;
     let err = parse_chat_response(frame).unwrap_err();
     match err {
         CloudGoclawError::BadRequest(m) => assert!(m.contains("no agent")),
@@ -103,8 +104,7 @@ fn parse_chat_response_skips_connect_ack_id() {
 
 #[test]
 fn parse_chat_response_unknown_error_code_maps_to_server_error() {
-    let frame =
-        r#"{"type":"res","id":"2","ok":false,"error":{"code":"WEIRD","message":"x"}}"#;
+    let frame = r#"{"type":"res","id":"2","ok":false,"error":{"code":"WEIRD","message":"x"}}"#;
     let err = parse_chat_response(frame).unwrap_err();
     match err {
         CloudGoclawError::ServerError(500, m) => assert!(m.contains("WEIRD")),

@@ -30,9 +30,15 @@ fn main() {
 
     let checks: [(&str, bool); 7] = [
         ("\\multirow preserved", after_tex.contains("\\multirow")),
-        ("\\multicolumn preserved", after_tex.contains("\\multicolumn")),
+        (
+            "\\multicolumn preserved",
+            after_tex.contains("\\multicolumn"),
+        ),
         ("\\cline preserved", after_tex.contains("\\cline")),
-        ("\\begin{tabular} preserved", after_tex.contains("\\begin{tabular}")),
+        (
+            "\\begin{tabular} preserved",
+            after_tex.contains("\\begin{tabular}"),
+        ),
         ("Nhóm diacritic intact", after_tex.contains("Nhóm")),
         ("Loại I diacritic intact", after_tex.contains("Loại I")),
         ("NOT flattened to MD grid", !after_tex.contains("| Nhóm |")),

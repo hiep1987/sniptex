@@ -58,8 +58,7 @@ pub fn init(app_data_dir: &Path) -> Result<HistoryStore, StorageError> {
     ensure_dir(&app_data_dir.join(THUMBS_SUBDIR))?;
 
     let db_path = app_data_dir.join(DB_FILENAME);
-    let mut conn =
-        Connection::open(&db_path).map_err(|e| StorageError::OpenDb(e.to_string()))?;
+    let mut conn = Connection::open(&db_path).map_err(|e| StorageError::OpenDb(e.to_string()))?;
 
     // WAL gives us crash-resilient concurrent reads (UI search) while a
     // write (snip insert) is in flight. NORMAL synchronous matches SQLite's
@@ -80,8 +79,7 @@ pub fn init(app_data_dir: &Path) -> Result<HistoryStore, StorageError> {
 }
 
 fn ensure_dir(p: &Path) -> Result<(), StorageError> {
-    std::fs::create_dir_all(p)
-        .map_err(|e| StorageError::CreateDir(p.to_path_buf(), e.to_string()))
+    std::fs::create_dir_all(p).map_err(|e| StorageError::CreateDir(p.to_path_buf(), e.to_string()))
 }
 
 /// Best-effort cleanup helper used by `delete` / eviction. Errors are

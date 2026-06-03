@@ -58,7 +58,11 @@ pub fn clamp_and_validate_rect(
         return Err(CropError::ZeroArea);
     }
 
-    let scale = if scale_factor > 0.0 { scale_factor as f64 } else { 1.0 };
+    let scale = if scale_factor > 0.0 {
+        scale_factor as f64
+    } else {
+        1.0
+    };
 
     // Convert CSS-space (logical) to physical pixels.
     let px_x = (sel.x as f64 * scale).round();
@@ -126,11 +130,21 @@ mod tests {
 
     #[test]
     fn rejects_zero_area() {
-        let r = SelectionRect { x: 10, y: 10, w: 0, h: 50 };
+        let r = SelectionRect {
+            x: 10,
+            y: 10,
+            w: 0,
+            h: 50,
+        };
         let err = clamp_and_validate_rect(r, 1000, 1000, 1.0).unwrap_err();
         assert!(matches!(err, CropError::ZeroArea));
 
-        let r = SelectionRect { x: 10, y: 10, w: 50, h: 0 };
+        let r = SelectionRect {
+            x: 10,
+            y: 10,
+            w: 50,
+            h: 0,
+        };
         assert!(matches!(
             clamp_and_validate_rect(r, 1000, 1000, 1.0).unwrap_err(),
             CropError::ZeroArea
@@ -139,7 +153,12 @@ mod tests {
 
     #[test]
     fn scales_with_dpi() {
-        let r = SelectionRect { x: 100, y: 50, w: 200, h: 100 };
+        let r = SelectionRect {
+            x: 100,
+            y: 50,
+            w: 200,
+            h: 100,
+        };
         let (x, y, w, h) = clamp_and_validate_rect(r, 4000, 4000, 2.0).unwrap();
         assert_eq!((x, y, w, h), (200, 100, 400, 200));
     }
@@ -147,7 +166,12 @@ mod tests {
     #[test]
     fn clamps_to_image_bounds() {
         // Selection extends past the right/bottom edges → clamp.
-        let r = SelectionRect { x: 900, y: 900, w: 300, h: 300 };
+        let r = SelectionRect {
+            x: 900,
+            y: 900,
+            w: 300,
+            h: 300,
+        };
         let (x, y, w, h) = clamp_and_validate_rect(r, 1000, 1000, 1.0).unwrap();
         assert_eq!((x, y, w, h), (900, 900, 100, 100));
     }
@@ -155,14 +179,24 @@ mod tests {
     #[test]
     fn clamps_negative_origin() {
         // Drag started "above and left of" the overlay → clamp to (0,0).
-        let r = SelectionRect { x: -50, y: -30, w: 200, h: 100 };
+        let r = SelectionRect {
+            x: -50,
+            y: -30,
+            w: 200,
+            h: 100,
+        };
         let (x, y, w, h) = clamp_and_validate_rect(r, 1000, 1000, 1.0).unwrap();
         assert_eq!((x, y, w, h), (0, 0, 150, 70));
     }
 
     #[test]
     fn rejects_fully_out_of_bounds() {
-        let r = SelectionRect { x: 2000, y: 2000, w: 100, h: 100 };
+        let r = SelectionRect {
+            x: 2000,
+            y: 2000,
+            w: 100,
+            h: 100,
+        };
         let err = clamp_and_validate_rect(r, 1000, 1000, 1.0).unwrap_err();
         assert!(matches!(err, CropError::OutOfBounds));
     }

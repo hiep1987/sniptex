@@ -55,8 +55,7 @@ fn test_parse_empty_pages() {
 
 #[test]
 fn test_parse_null_markdown() {
-    let err =
-        parse_response(r#"{ "pages": [{ "markdown": null }] }"#).unwrap_err();
+    let err = parse_response(r#"{ "pages": [{ "markdown": null }] }"#).unwrap_err();
     assert!(matches!(err, CloudMistralError::EmptyResponse));
 }
 

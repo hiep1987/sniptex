@@ -126,10 +126,7 @@ pub fn delete(conn: &Connection, id: i64) -> SqlResult<Option<(String, String)>>
 
 /// Trim oldest rows past `max`. Returns the (image_path, thumb_path) of
 /// every evicted record so the caller can clean up disk files.
-pub fn enforce_max_records(
-    conn: &Connection,
-    max: usize,
-) -> SqlResult<Vec<(String, String)>> {
+pub fn enforce_max_records(conn: &Connection, max: usize) -> SqlResult<Vec<(String, String)>> {
     let total: i64 = conn.query_row("SELECT COUNT(*) FROM snip_records", [], |r| r.get(0))?;
     let max_i = max as i64;
     if total <= max_i {
@@ -143,7 +140,11 @@ pub fn enforce_max_records(
     )?;
     let victims: Vec<(i64, String, String)> = select
         .query_map(params![to_remove], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })?
         .collect::<SqlResult<Vec<_>>>()?;
 

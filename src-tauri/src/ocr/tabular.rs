@@ -20,10 +20,7 @@ use super::tabular_complex_grid::convert_flattened_complex_grid;
 fn md_table_block_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
-            r"(?m)^\|[^\n]*\|\s*\n\|[\s:|-]+\|\s*\n(?:\|[^\n]*\|\s*\n?)+",
-        )
-        .unwrap()
+        Regex::new(r"(?m)^\|[^\n]*\|\s*\n\|[\s:|-]+\|\s*\n(?:\|[^\n]*\|\s*\n?)+").unwrap()
     })
 }
 
@@ -140,7 +137,10 @@ mod tests {
         let out = markdown_tables_to_latex_tabular(md);
         assert!(out.starts_with("**Câu 7.**"), "lost prose: {out}");
         assert!(out.contains("\\begin{tabular}{|l|l|}"), "no tabular: {out}");
-        assert!(out.contains("Tìm khoảng tứ phân vị."), "lost trailing prose: {out}");
+        assert!(
+            out.contains("Tìm khoảng tứ phân vị."),
+            "lost trailing prose: {out}"
+        );
     }
 
     #[test]

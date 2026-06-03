@@ -100,9 +100,15 @@ fn reconstructs_title_row_spanning_all_columns() {
     let tex = markdown_tables_to_latex_tabular(md);
 
     assert!(tex.starts_with("\\begin{tabular}{|l|c|c|}"), "got: {tex}");
-    assert!(tex.contains("\\multicolumn{3}{|c|}{Country List}"), "got: {tex}");
+    assert!(
+        tex.contains("\\multicolumn{3}{|c|}{Country List}"),
+        "got: {tex}"
+    );
     assert!(!tex.contains("Country List &  &"), "got: {tex}");
-    assert!(tex.contains("Country Name or Area Name & ISO ALPHA 2 Code & ISO ALPHA 3"), "got: {tex}");
+    assert!(
+        tex.contains("Country Name or Area Name & ISO ALPHA 2 Code & ISO ALPHA 3"),
+        "got: {tex}"
+    );
     assert!(tex.contains("Angola & AO & AGO"), "got: {tex}");
 }
 
@@ -172,7 +178,10 @@ fn converts_round3_table_only_codex_fixtures_to_tabular() {
             "{name} did not produce a tabular environment: {tex}"
         );
         assert!(tex.contains("\\hline"), "{name} missing hline: {tex}");
-        assert!(!tex.contains("|---"), "{name} still has Markdown separator: {tex}");
+        assert!(
+            !tex.contains("|---"),
+            "{name} still has Markdown separator: {tex}"
+        );
         assert_ne!(tex.trim(), md.trim(), "{name} was not converted");
     }
 }
