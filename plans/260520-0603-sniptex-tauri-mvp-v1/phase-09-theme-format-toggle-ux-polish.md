@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Theme & Format Toggle & UX Polish"
-status: implementation-complete
+status: completed
 priority: P2
 effort: "3d"
 dependencies: [8]
