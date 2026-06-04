@@ -16,7 +16,7 @@ use commands::{
     show_window, test_agent, test_api_key, update_settings,
 };
 
-use tauri::Manager;
+use tauri::{LogicalPosition, LogicalSize, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -93,6 +93,38 @@ pub fn run() {
                         let _ = w.set_focus();
                     }
                 }
+            }
+
+            // Warm up the overlay NSWindow before the first snip. Without
+            // this, the first show_overlay_and_await_selection on macOS
+            // shows the overlay at AppKit's default frame (set_position /
+            // set_size on a never-shown NSWindow don't apply until after
+            // its first orderFront), so the user's CSS-space drag maps to
+            // monitor coords offset by ~menu-bar height. Hidden async so
+            // the runloop completes one layout pass.
+            #[cfg(target_os = "macos")]
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let (logical_w, logical_h) = app
+                    .primary_monitor()
+                    .ok()
+                    .flatten()
+                    .map(|m| {
+                        let size = m.size();
+                        let scale = m.scale_factor();
+                        (
+                            (size.width as f64) / scale,
+                            (size.height as f64) / scale,
+                        )
+                    })
+                    .unwrap_or((1440.0, 900.0));
+                let _ = overlay.set_position(LogicalPosition::new(0.0, 0.0));
+                let _ = overlay.set_size(LogicalSize::new(logical_w, logical_h));
+                let _ = overlay.show();
+                let overlay_clone = overlay.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+                    let _ = overlay_clone.hide();
+                });
             }
             Ok(())
         })
