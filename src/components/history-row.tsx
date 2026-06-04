@@ -6,6 +6,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { toast } from "sonner";
 import type { HistoryItem } from "@/stores/history-store";
 import type { SnipResult } from "@/lib/invoke";
+import { cn } from "@/lib/cn";
 import { RerunMenu } from "./rerun-menu";
 
 type Props = {
@@ -56,18 +57,23 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
   return (
     <article
       data-testid="history-row"
-      className="group flex gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+      className="group flex h-full items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
     >
-      {thumbSrc ? (
-        <img
-          src={thumbSrc}
-          alt=""
-          loading="lazy"
-          className="size-16 shrink-0 rounded border border-slate-200 object-contain dark:border-slate-700"
-        />
-      ) : (
-        <div className="size-16 shrink-0 rounded border border-dashed border-slate-200 dark:border-slate-700" />
-      )}
+      <div
+        className={cn(
+          "flex size-16 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-700",
+          !thumbSrc && "border-dashed",
+        )}
+      >
+        {thumbSrc && (
+          <img
+            src={thumbSrc}
+            alt=""
+            loading="lazy"
+            className="max-h-full max-w-full object-contain"
+          />
+        )}
+      </div>
 
       <button
         type="button"
