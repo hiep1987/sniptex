@@ -12,8 +12,47 @@ const FORMATS: { value: OutputFormat; label: string; desc: string }[] = [
   { value: "unicode_pretty", label: "Unicode", desc: "Unicode math symbols" },
 ];
 
+type FormatRadioGroupProps = {
+  name: string;
+  value: OutputFormat;
+  onChange: (value: OutputFormat) => void;
+};
+
+function FormatRadioGroup({ name, value, onChange }: FormatRadioGroupProps) {
+  return (
+    <div className="space-y-1.5">
+      {FORMATS.map((f) => (
+        <label
+          key={f.value}
+          className={cn(
+            "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 transition",
+            value === f.value
+              ? "border-slate-900 bg-slate-50 dark:border-slate-100 dark:bg-slate-900"
+              : "border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800",
+          )}
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === f.value}
+            onChange={() => onChange(f.value)}
+            className="accent-slate-900 dark:accent-slate-100"
+          />
+          <div>
+            <span className="text-sm font-medium">{f.label}</span>
+            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+              {f.desc}
+            </span>
+          </div>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export default function FormatsTab() {
-  const { default_format, copy_as_formats, patch } = useSettingsStore();
+  const { default_format, history_copy_format, copy_as_formats, patch } =
+    useSettingsStore();
 
   const toggleCopyAs = (fmt: OutputFormat) => {
     const current = new Set(copy_as_formats);
@@ -32,33 +71,20 @@ export default function FormatsTab() {
 
       <div className="space-y-3">
         <label className="block text-sm font-medium">Default output format</label>
-        <div className="space-y-1.5">
-          {FORMATS.map((f) => (
-            <label
-              key={f.value}
-              className={cn(
-                "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 transition",
-                default_format === f.value
-                  ? "border-slate-900 bg-slate-50 dark:border-slate-100 dark:bg-slate-900"
-                  : "border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800",
-              )}
-            >
-              <input
-                type="radio"
-                name="default-format"
-                checked={default_format === f.value}
-                onChange={() => patch({ default_format: f.value })}
-                className="accent-slate-900 dark:accent-slate-100"
-              />
-              <div>
-                <span className="text-sm font-medium">{f.label}</span>
-                <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                  {f.desc}
-                </span>
-              </div>
-            </label>
-          ))}
-        </div>
+        <FormatRadioGroup
+          name="default-format"
+          value={default_format}
+          onChange={(value) => patch({ default_format: value })}
+        />
+      </div>
+
+      <div className="space-y-3">
+        <label className="block text-sm font-medium">History row copy format</label>
+        <FormatRadioGroup
+          name="history-copy-format"
+          value={history_copy_format}
+          onChange={(value) => patch({ history_copy_format: value })}
+        />
       </div>
 
       <div className="space-y-3">

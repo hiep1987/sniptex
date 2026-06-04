@@ -53,6 +53,8 @@ pub struct AppSettings {
     pub hotkey: String,
     pub agent_priority: Vec<String>,
     pub default_format: OutputFormat,
+    #[serde(default = "default_history_copy_format")]
+    pub history_copy_format: OutputFormat,
     pub copy_as_formats: Vec<OutputFormat>,
     pub history_size: HistorySize,
     pub preview_duration_ms: u32,
@@ -72,6 +74,7 @@ impl Default for AppSettings {
                 .map(|s| s.to_string())
                 .collect(),
             default_format: OutputFormat::Smart,
+            history_copy_format: default_history_copy_format(),
             copy_as_formats: vec![
                 OutputFormat::Plain,
                 OutputFormat::Smart,
@@ -96,6 +99,10 @@ fn default_hotkey_string() -> String {
     } else {
         "Control+Shift+M".to_string()
     }
+}
+
+fn default_history_copy_format() -> OutputFormat {
+    OutputFormat::Smart
 }
 
 pub struct SettingsStore {
@@ -153,6 +160,7 @@ pub struct SettingsPatch {
     pub hotkey: Option<String>,
     pub agent_priority: Option<Vec<String>>,
     pub default_format: Option<OutputFormat>,
+    pub history_copy_format: Option<OutputFormat>,
     pub copy_as_formats: Option<Vec<OutputFormat>>,
     pub history_size: Option<HistorySize>,
     pub preview_duration_ms: Option<u32>,
@@ -164,37 +172,22 @@ pub struct SettingsPatch {
 }
 
 fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
-    if let Some(v) = patch.hotkey {
-        settings.hotkey = v;
-    }
-    if let Some(v) = patch.agent_priority {
-        settings.agent_priority = v;
-    }
-    if let Some(v) = patch.default_format {
-        settings.default_format = v;
-    }
-    if let Some(v) = patch.copy_as_formats {
-        settings.copy_as_formats = v;
-    }
-    if let Some(v) = patch.history_size {
-        settings.history_size = v;
-    }
-    if let Some(v) = patch.preview_duration_ms {
-        settings.preview_duration_ms = v;
-    }
-    if let Some(v) = patch.sound_on_success {
-        settings.sound_on_success = v;
-    }
-    if let Some(v) = patch.launch_at_login {
-        settings.launch_at_login = v;
-    }
-    if let Some(v) = patch.theme {
-        settings.theme = v;
-    }
-    if let Some(v) = patch.onboarding_completed {
-        settings.onboarding_completed = v;
-    }
-    if let Some(v) = patch.cloud_mode_enabled {
-        settings.cloud_mode_enabled = v;
+    set_if_some(&mut settings.hotkey, patch.hotkey);
+    set_if_some(&mut settings.agent_priority, patch.agent_priority);
+    set_if_some(&mut settings.default_format, patch.default_format);
+    set_if_some(&mut settings.history_copy_format, patch.history_copy_format);
+    set_if_some(&mut settings.copy_as_formats, patch.copy_as_formats);
+    set_if_some(&mut settings.history_size, patch.history_size);
+    set_if_some(&mut settings.preview_duration_ms, patch.preview_duration_ms);
+    set_if_some(&mut settings.sound_on_success, patch.sound_on_success);
+    set_if_some(&mut settings.launch_at_login, patch.launch_at_login);
+    set_if_some(&mut settings.theme, patch.theme);
+    set_if_some(&mut settings.onboarding_completed, patch.onboarding_completed);
+    set_if_some(&mut settings.cloud_mode_enabled, patch.cloud_mode_enabled);
+}
+
+fn set_if_some<T>(target: &mut T, value: Option<T>) {
+    if let Some(v) = value {
+        *target = v;
     }
 }

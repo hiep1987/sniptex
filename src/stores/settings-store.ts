@@ -23,6 +23,7 @@ const DEFAULTS: AppSettings = {
   hotkey: "Command+Shift+M",
   agent_priority: ["codex", "cloud-gemini", "cloud-mistral", "cloud-novita"],
   default_format: "smart",
+  history_copy_format: "smart",
   copy_as_formats: ["plain", "smart", "inline", "display", "markdown"],
   history_size: "one_hundred",
   preview_duration_ms: 3000,

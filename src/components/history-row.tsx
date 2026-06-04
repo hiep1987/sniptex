@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import type { HistoryItem } from "@/stores/history-store";
 import type { SnipResult } from "@/lib/invoke";
 import { cn } from "@/lib/cn";
+import { formatOutput, labelForFormat } from "@/lib/format";
+import { playSuccessSound } from "@/lib/success-sound";
+import { useSettingsStore } from "@/stores/settings-store";
 import { RerunMenu } from "./rerun-menu";
 
 type Props = {
@@ -18,6 +21,8 @@ type Props = {
 export function HistoryRow({ item, onDelete, onRerun }: Props) {
   const [rerunOpen, setRerunOpen] = useState(false);
   const [rerunning, setRerunning] = useState(false);
+  const historyCopyFormat = useSettingsStore((s) => s.history_copy_format);
+  const soundOnSuccess = useSettingsStore((s) => s.sound_on_success);
   const rerunBtnRef = useRef<HTMLButtonElement | null>(null);
   const thumbSrc = useMemo(
     () => (item.thumb_path ? convertFileSrc(item.thumb_path) : null),
@@ -30,8 +35,14 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
 
   const handleCopy = async () => {
     try {
-      await writeText(item.text);
-      toast.success("Copied to clipboard");
+      const formatted = await formatOutput(
+        item.text,
+        item.detected,
+        historyCopyFormat,
+      );
+      await writeText(formatted);
+      await playSuccessSound(soundOnSuccess);
+      toast.success(`Copied as ${labelForFormat(historyCopyFormat)}`);
     } catch (err) {
       toast.error("Copy failed", { description: String(err) });
     }
@@ -103,7 +114,7 @@ export function HistoryRow({ item, onDelete, onRerun }: Props) {
         <button
           type="button"
           onClick={handleCopy}
-          title="Copy text"
+          title={`Copy as ${labelForFormat(historyCopyFormat)}`}
           className="inline-flex size-7 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         >
           <Copy className="size-3.5" />

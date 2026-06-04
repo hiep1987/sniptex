@@ -49,6 +49,7 @@ export type AppSettings = {
   hotkey: string;
   agent_priority: string[];
   default_format: OutputFormat;
+  history_copy_format: OutputFormat;
   copy_as_formats: OutputFormat[];
   history_size: HistorySizeOption;
   preview_duration_ms: number;
