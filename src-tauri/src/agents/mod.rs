@@ -108,14 +108,29 @@ fn candidate_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = path_env.split(separator).map(PathBuf::from).collect();
 
     if let Some(home) = dirs::home_dir() {
+        // Cross-platform locations: language-runtime managers, user-scoped
+        // bin dirs. Bun installs to ~/.bun/bin on every OS.
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".local/share/mise/installs"));
         dirs.push(home.join(".bun/bin"));
         dirs.push(home.join(".cargo/bin"));
         dirs.push(home.join(".npm-global/bin"));
-        dirs.push(home.join("AppData").join("Roaming").join("npm"));
+
+        #[cfg(target_os = "windows")]
+        {
+            // Default npm global prefix on Windows; nodist/scoop/winget all
+            // pipe global installs through here.
+            dirs.push(home.join("AppData").join("Roaming").join("npm"));
+            // winget + many native installers drop binaries here.
+            dirs.push(home.join("AppData").join("Local").join("Programs"));
+            // scoop shim layer — covers `scoop install` packages that
+            // expose CLIs without putting them on PATH directly.
+            dirs.push(home.join("scoop").join("shims"));
+        }
     }
-    if cfg!(target_os = "macos") {
+
+    #[cfg(target_os = "macos")]
+    {
         dirs.push(PathBuf::from("/opt/homebrew/bin"));
         dirs.push(PathBuf::from("/usr/local/bin"));
     }

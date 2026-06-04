@@ -16,7 +16,11 @@ use commands::{
     show_window, test_agent, test_api_key, update_settings,
 };
 
-use tauri::{LogicalPosition, LogicalSize, Manager};
+use tauri::Manager;
+// LogicalPosition / LogicalSize are only used by the macOS overlay warmup
+// below; importing them unconditionally trips unused_imports on other targets.
+#[cfg(target_os = "macos")]
+use tauri::{LogicalPosition, LogicalSize};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

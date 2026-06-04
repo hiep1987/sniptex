@@ -1,6 +1,16 @@
 mod consistency;
 pub mod dispatcher;
+
+// PDF rasterization currently has a CoreGraphics-only implementation.
+// Non-macOS targets pick up a stub with the same public surface so the
+// rest of the OCR pipeline compiles; PDF OCR on those platforms surfaces
+// a clear "not supported yet" error to the caller.
+#[cfg(target_os = "macos")]
 pub mod pdf_render;
+#[cfg(not(target_os = "macos"))]
+#[path = "pdf_render_stub.rs"]
+pub mod pdf_render;
+
 pub mod postprocess;
 pub mod prompt;
 pub mod smart_format;

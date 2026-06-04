@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Windows Cross-Platform Port"
-status: pending
+status: partial — mac-side code-prep complete, windows-machine validation pending
 priority: P1
 effort: "2d"
 dependencies: [9]
@@ -12,6 +12,22 @@ dependencies: [9]
 ## Overview
 
 Build and test SnipTeX on Windows. Verify all features work cross-platform: hotkey (Ctrl+Shift+M), screen capture via `xcap`, agent detection (PATH + AppData + winget paths), tray icon (system tray), clipboard, SQLite history, settings persistence, theme, autostart (Registry Run key), and onboarding install commands (winget/npm). Fix any Windows-specific path, permission, or rendering issues.
+
+## Status (2026-06-04)
+
+Phase 10 is being split into two batches:
+
+- **Batch A — Mac-side code-prep (DONE 2026-06-04):** every change that can be authored without a Windows host. Cargo dep gating, platform-conditional source guards, tray icon format switch, agent search-path restructure. Verified by `cargo check` + 27-test pure-logic suite pass on macOS.
+- **Batch B — Windows-machine validation (PENDING):** all build/runtime work that requires a Windows 10/11 host or VM. MSI bundle build, multi-DPI selector verification, registry autostart key, winget package-ID verification, RAM/size profiling.
+
+## Deferred Scope
+
+**PDF OCR on Windows is partially deferred.** The PDF rasterizer in `ocr::pdf_render` is a CoreGraphics-only implementation; on Windows / Linux it is replaced by a stub that returns `PdfRenderError::Open("PDF OCR is not yet supported on this platform")`. What this means in practice:
+
+- **Disabled on Windows:** CLI-agent PDF flow (Codex / Gemini CLI need page-by-page PNGs), the PDF first-page thumbnail in History.
+- **Still works on Windows (untested but expected):** Cloud PDF OCR via Gemini API and Mistral API. Those adapters upload raw PDF bytes server-side; the only local use of `page_count` is for client-side timeout scaling, and the call sites already fall back to `unwrap_or(1)` when `page_count` returns Err. So cloud PDF effectively gets a default 30s timeout rather than `pages × 30s` on Windows.
+
+A future "Phase 10.5 / Windows PDF" phase should evaluate `pdfium-render` or `lopdf + resvg` and ship a Windows-native rasterizer.
 
 ## Key Insights
 
@@ -81,14 +97,20 @@ src-tauri/icons/
 
 ## Related Code Files
 
-- Modify: `src-tauri/src/agents/mod.rs` — Windows-specific search paths for agent binaries
-- Modify: `src-tauri/src/capture/region_selector.rs` — verify multi-DPI rendering on Windows
-- Modify: `src-tauri/src/tray.rs` — conditional icon format (ico vs png)
-- Modify: `src-tauri/src/hotkey.rs` — verify `CommandOrControl` mapping
-- Modify: `src/windows/OnboardingWindow/InstallGuideStep.tsx` — Windows install commands (winget)
-- Create: `src-tauri/icons/tray-icon.ico` — 16x16 ICO for Windows system tray
-- Modify: `src-tauri/tauri.conf.json` — verify Windows-specific bundle config
-- Modify: `src-tauri/Cargo.toml` — verify no Mac-only dependencies leak into Windows build
+Batch A (done from Mac, 2026-06-04):
+
+- Modified: `src-tauri/Cargo.toml` — gated `core-graphics` + `core-foundation` to `[target.'cfg(target_os = "macos")'.dependencies]`; added tauri `image-ico` feature.
+- Modified: `src-tauri/src/ocr/mod.rs` — cfg-branched `pub mod pdf_render;` so non-macOS picks up the stub.
+- Created: `src-tauri/src/ocr/pdf_render_stub.rs` — non-macOS stub with the same public API (`PdfRenderError`, `render_pages_to_pngs`, `page_count`).
+- Modified: `src-tauri/src/tray.rs` — Windows tray loads `.ico` via cfg-branched `include_bytes!`; macOS / Linux keep `.png` template format.
+- Modified: `src-tauri/src/agents/mod.rs` — Windows-specific search dirs (`AppData/Roaming/npm`, `AppData/Local/Programs`, `scoop/shims`); macOS-specific (`/opt/homebrew/bin`, `/usr/local/bin`); shared (`.local/bin`, `.cargo/bin`, `.bun/bin`, `.npm-global/bin`, mise installs).
+- Already correct: `src-tauri/src/hotkey.rs` (`CommandOrControl` parsing already platform-aware), `src-tauri/tauri.conf.json` (bundle.targets already include `msi` + `nsis`; `icon.ico` already in icon list), `src/windows/onboarding/install-step.tsx` (already branches `mac` vs `win` commands).
+
+Batch B (requires Windows host):
+
+- Verify: `src-tauri/src/capture/region_selector.rs` — multi-DPI rendering on 100/125/150/200% scaling.
+- Verify: `src-tauri/tauri.conf.json` — MSI / NSIS bundle config (signing config lives in Phase 11).
+- Verify: `src/windows/onboarding/install-step.tsx` — decide whether to add `winget install Google.GeminiCLI` / `winget install OpenAI.Codex` once package IDs are confirmed; current npm commands ship as-is.
 
 ## Implementation Steps
 
@@ -107,18 +129,29 @@ src-tauri/icons/
 
 ## Todo List
 
-- [ ] Windows compilation passes (fix #[cfg] guards)
-- [ ] Agent detection works on Windows paths
-- [ ] Hotkey Ctrl+Shift+M works
-- [ ] Region selector renders on multi-DPI
-- [ ] Tray icon (.ico) shows in system tray
-- [ ] Clipboard works for all formats
-- [ ] SQLite history under AppData
-- [ ] Settings persistence under AppData
-- [ ] Theme follows Windows appearance
-- [ ] Autostart via Registry Run key
-- [ ] Onboarding shows Windows install commands
-- [ ] MSI installer builds and installs cleanly
+Batch A — Mac-side code-prep:
+
+- [x] Gate `core-graphics` + `core-foundation` to macOS in `Cargo.toml`
+- [x] Cfg-gate `pdf_render` module; provide non-macOS stub with matching API
+- [x] Switch tray icon to `.ico` on Windows; add tauri `image-ico` feature
+- [x] Restructure `agents::candidate_dirs()` with platform-conditional paths
+- [x] Audit `capture/` and `storage/` for Mac-only symbols (none found)
+- [x] `cargo check` + 27 pure-logic tests still pass on macOS
+
+Batch B — Windows-machine validation (PENDING):
+
+- [ ] Windows compilation passes end-to-end (`cargo build --target x86_64-pc-windows-msvc`)
+- [ ] Agent detection finds Codex / Gemini installed via npm + winget on Windows paths
+- [ ] Hotkey Ctrl+Shift+M registers and triggers capture
+- [ ] Region selector renders correctly on 100/125/150/200% DPI scaling
+- [ ] Tray icon (`.ico`) shows correctly in system tray; status switches work
+- [ ] Clipboard works for all output formats
+- [ ] SQLite history reads/writes under `{APPDATA}\com.sniptex.app\`
+- [ ] Settings persistence under `{APPDATA}\com.sniptex.app\`
+- [ ] Theme follows Windows appearance setting
+- [ ] Autostart toggle creates/removes `HKCU\…\Run` registry key
+- [ ] Onboarding shows correct Windows install commands; verify winget package IDs
+- [ ] MSI installer builds and installs cleanly on Windows 10/11
 - [ ] App size < 20MB, RAM < 100MB idle
 
 ## Success Criteria
@@ -149,5 +182,6 @@ src-tauri/icons/
 
 ## Open Questions
 
-- Is Codex CLI available via `winget`? If not, npm is the only install path for Windows.
+- Is Codex CLI available via `winget`? If not, npm is the only install path for Windows. (Decision deferred to Batch B — keep npm commands until package IDs verified on a Windows host.)
 - Should we test on Windows 10 in addition to 11? (Tauri 2 supports Windows 10 1803+)
+- Windows PDF OCR: pick `pdfium-render` vs `lopdf + resvg` vs deferring until usage demands it. Tracked in "Deferred Scope" section.

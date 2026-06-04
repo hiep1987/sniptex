@@ -26,12 +26,27 @@ pub const TRAY_ABOUT_EVENT: &str = "tray-about";
 /// independently of which entry point (button, hotkey, tray) triggered it.
 pub const SNIP_STATE_EVENT: &str = "snip-state";
 
-// Mac template PNGs live next to the bundled app icons. Loaded at runtime
-// via the resource path so they ship with the bundle on all platforms.
+// macOS uses template PNGs so the OS auto-tints for light/dark menu bar.
+// Windows ships multi-resolution .ico bundles so the system tray picks
+// the right size for the current DPI. Both formats sit next to the
+// bundled app icons and ship via `include_bytes!`.
+#[cfg(not(target_os = "windows"))]
 const ICON_IDLE: &[u8] = include_bytes!("../icons/tray/tray-idle.png");
+#[cfg(not(target_os = "windows"))]
 const ICON_CAPTURING: &[u8] = include_bytes!("../icons/tray/tray-capturing.png");
+#[cfg(not(target_os = "windows"))]
 const ICON_PROCESSING: &[u8] = include_bytes!("../icons/tray/tray-processing.png");
+#[cfg(not(target_os = "windows"))]
 const ICON_ERROR: &[u8] = include_bytes!("../icons/tray/tray-error.png");
+
+#[cfg(target_os = "windows")]
+const ICON_IDLE: &[u8] = include_bytes!("../icons/tray/tray-idle.ico");
+#[cfg(target_os = "windows")]
+const ICON_CAPTURING: &[u8] = include_bytes!("../icons/tray/tray-capturing.ico");
+#[cfg(target_os = "windows")]
+const ICON_PROCESSING: &[u8] = include_bytes!("../icons/tray/tray-processing.ico");
+#[cfg(target_os = "windows")]
+const ICON_ERROR: &[u8] = include_bytes!("../icons/tray/tray-error.ico");
 
 fn icon_for(status: TrayStatus) -> tauri::Result<Image<'static>> {
     let bytes = match status {
