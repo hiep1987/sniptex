@@ -98,6 +98,16 @@ if (Test-Path $vsBuildToolsPath) {
     Install-Winget -Id 'Microsoft.VisualStudio.2022.BuildTools' -DisplayName 'VS 2022 Build Tools' -Override $override
 }
 
+# ---- 6b. LLVM/Clang (required by the `ring` crate's perlasm build on Windows,
+#         especially aarch64-pc-windows-msvc; VS Build Tools alone is not enough) ----
+Step "LLVM / Clang (required by ring crate)"
+if (Test-Cmd clang) {
+    Ok (clang --version | Select-Object -First 1)
+} else {
+    Install-Winget -Id 'LLVM.LLVM' -DisplayName 'LLVM (clang)'
+    Warn "open a fresh PowerShell so PATH picks up C:\Program Files\LLVM\bin."
+}
+
 # ---- 7. WebView2 runtime ----
 Step "WebView2 runtime"
 $wv2Key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -123,7 +133,7 @@ if (Test-Cmd rustup) {
 
 # ---- 10. Final verification ----
 Step "Verify final toolchain"
-$tools = [ordered]@{ 'git' = 'git --version'; 'rustc' = 'rustc --version'; 'cargo' = 'cargo --version'; 'node' = 'node --version'; 'pnpm' = 'pnpm --version' }
+$tools = [ordered]@{ 'git' = 'git --version'; 'rustc' = 'rustc --version'; 'cargo' = 'cargo --version'; 'clang' = 'clang --version | Select-Object -First 1'; 'node' = 'node --version'; 'pnpm' = 'pnpm --version' }
 $missing = @()
 foreach ($k in $tools.Keys) {
     if (Test-Cmd $k) {
