@@ -99,13 +99,28 @@ if (Test-Path $vsBuildToolsPath) {
 }
 
 # ---- 6b. LLVM/Clang (required by the `ring` crate's perlasm build on Windows,
-#         especially aarch64-pc-windows-msvc; VS Build Tools alone is not enough) ----
+#         especially aarch64-pc-windows-msvc; VS Build Tools alone is not enough).
+#         winget LLVM.LLVM installs the binaries but the silent installer skips
+#         the "add to PATH" prompt, so we must wire it up ourselves. ----
 Step "LLVM / Clang (required by ring crate)"
 if (Test-Cmd clang) {
     Ok (clang --version | Select-Object -First 1)
 } else {
     Install-Winget -Id 'LLVM.LLVM' -DisplayName 'LLVM (clang)'
-    Warn "open a fresh PowerShell so PATH picks up C:\Program Files\LLVM\bin."
+}
+$llvmBin = "C:\Program Files\LLVM\bin"
+if (Test-Path "$llvmBin\clang.exe") {
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($null -eq $userPath -or $userPath -notlike "*$llvmBin*") {
+        [Environment]::SetEnvironmentVariable("PATH", "$llvmBin;$userPath", "User")
+        Ok "added $llvmBin to user PATH (persisted)"
+    } else {
+        Ok "$llvmBin already in user PATH"
+    }
+    if ($env:PATH -notlike "*$llvmBin*") { $env:PATH = "$llvmBin;$env:PATH" }
+    Ok ("clang now resolves: " + (clang --version | Select-Object -First 1))
+} else {
+    Warn "clang.exe not found at $llvmBin after install. Check LLVM installer output."
 }
 
 # ---- 7. WebView2 runtime ----
