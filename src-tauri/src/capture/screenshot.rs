@@ -75,8 +75,28 @@ pub fn capture_monitor_region_to_temp_png(
     let (x, y, w, h) =
         clamp_selection_to_monitor(sel, geometry.logical_width, geometry.logical_height)?;
     let monitor = monitor_by_id(geometry.monitor_id)?;
+
+    // xcap::Monitor::capture_region takes coordinates in xcap's native
+    // space: logical points on macOS, physical pixels on Windows. The
+    // selection arrives here in CSS (logical) pixels, so we have to scale
+    // it on Windows before handing it off, otherwise the captured region
+    // is only `1 / scale_factor`-th of the rectangle the user actually
+    // dragged.
+    #[cfg(target_os = "windows")]
+    let (cap_x, cap_y, cap_w, cap_h) = {
+        let s = geometry.scale_factor as f64;
+        (
+            ((x as f64) * s).round() as u32,
+            ((y as f64) * s).round() as u32,
+            ((w as f64) * s).round() as u32,
+            ((h as f64) * s).round() as u32,
+        )
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (cap_x, cap_y, cap_w, cap_h) = (x, y, w, h);
+
     let img = monitor
-        .capture_region(x, y, w, h)
+        .capture_region(cap_x, cap_y, cap_w, cap_h)
         .map_err(map_capture_error)?;
     save_temp_png(img, "sniptex")
 }
@@ -118,18 +138,35 @@ fn geometry_from_monitor(monitor: &Monitor) -> Result<MonitorGeometry, CaptureEr
     let monitor_y = monitor
         .y()
         .map_err(|e| CaptureError::Capture(e.to_string()))?;
-    let logical_width = monitor
+    let raw_w = monitor
         .width()
         .map_err(|e| CaptureError::Capture(e.to_string()))?;
-    let logical_height = monitor
+    let raw_h = monitor
         .height()
         .map_err(|e| CaptureError::Capture(e.to_string()))?;
     let scale_factor = monitor
         .scale_factor()
         .map_err(|e| CaptureError::Capture(e.to_string()))?;
 
-    let pixel_width = ((logical_width as f32) * scale_factor).round() as u32;
-    let pixel_height = ((logical_height as f32) * scale_factor).round() as u32;
+    // xcap reports Monitor dimensions in logical points on macOS but in
+    // physical pixels on Windows. Normalize so geometry.{logical,pixel}_*
+    // mean what their names say on every platform — without this, on a
+    // 250% Windows display the overlay gets sized to 2.5x the screen and
+    // the drag rect maps to the wrong region of the captured image.
+    #[cfg(target_os = "windows")]
+    let (logical_width, logical_height, pixel_width, pixel_height) = (
+        ((raw_w as f32) / scale_factor).round() as u32,
+        ((raw_h as f32) / scale_factor).round() as u32,
+        raw_w,
+        raw_h,
+    );
+    #[cfg(not(target_os = "windows"))]
+    let (logical_width, logical_height, pixel_width, pixel_height) = (
+        raw_w,
+        raw_h,
+        ((raw_w as f32) * scale_factor).round() as u32,
+        ((raw_h as f32) * scale_factor).round() as u32,
+    );
 
     Ok(MonitorGeometry {
         monitor_id,
