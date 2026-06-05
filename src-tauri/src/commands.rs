@@ -288,22 +288,10 @@ async fn run_snip_inner(app: &AppHandle, agent_id: Option<String>) -> Result<Sni
     let cursor_x = (cursor.x / primary_scale).round() as i32;
     let cursor_y = (cursor.y / primary_scale).round() as i32;
 
-    log::info!(
-        "[snip-debug] cursor raw=({:.1},{:.1}) primary_scale={} converted=({},{})",
-        cursor.x, cursor.y, primary_scale, cursor_x, cursor_y
-    );
-
     let geometry = tokio::task::spawn_blocking(move || active_monitor_geometry(cursor_x, cursor_y))
         .await
         .map_err(|e| format!("monitor geometry join failed: {e}"))?
         .map_err(stringify_capture_error)?;
-
-    log::info!(
-        "[snip-debug] geometry monitor_id={} pos=({},{}) logical={}x{} pixel={}x{} scale={}",
-        geometry.monitor_id, geometry.monitor_x, geometry.monitor_y,
-        geometry.logical_width, geometry.logical_height,
-        geometry.pixel_width, geometry.pixel_height, geometry.scale_factor
-    );
 
     let selection = show_overlay_and_await_selection(app, &geometry).await?;
 
@@ -518,7 +506,6 @@ async fn show_overlay_and_await_selection(
     let region_handler = app.listen(CAPTURE_REGION_EVENT, move |event| {
         let payload = serde_json::from_str::<SelectionRectPayload>(event.payload()).ok();
         let rect = payload.map(SelectionRect::from);
-        log::info!("[snip-debug] frontend selection payload: {:?}", rect);
         if let Ok(mut guard) = region_sender.lock() {
             if let Some(s) = guard.take() {
                 let _ = s.send(rect);
@@ -558,17 +545,6 @@ async fn show_overlay_and_await_selection(
         .map_err(|e| format!("emit capture-start: {e}"))?;
     overlay.show().map_err(|e| format!("overlay show: {e}"))?;
     let _ = overlay.set_focus();
-
-    if let (Ok(pos), Ok(size), Ok(scale)) = (
-        overlay.outer_position(),
-        overlay.outer_size(),
-        overlay.scale_factor(),
-    ) {
-        log::info!(
-            "[snip-debug] overlay after show: outer_pos=({},{}) outer_size={}x{} window.scale={}",
-            pos.x, pos.y, size.width, size.height, scale
-        );
-    }
 
     match tokio::time::timeout(SELECTION_TIMEOUT, rx).await {
         Ok(Ok(rect)) => Ok(rect),

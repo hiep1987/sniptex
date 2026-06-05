@@ -138,12 +138,13 @@ Batch A — Mac-side code-prep:
 - [x] Audit `capture/` and `storage/` for Mac-only symbols (none found)
 - [x] `cargo check` + 27 pure-logic tests still pass on macOS
 
-Batch B — Windows-machine validation (PENDING):
+Batch B — Windows-machine validation:
 
-- [ ] Windows compilation passes end-to-end (`cargo build --target x86_64-pc-windows-msvc`)
+- [x] Windows compilation passes end-to-end (verified 2026-06-05 on Windows 11 ARM64 in Parallels)
+- [x] MSI installer builds and installs cleanly on Windows 11 (ARM64 MSI; x64 cross-build deferred to Phase 12 CI)
+- [x] Hotkey Ctrl+Shift+M registers and triggers capture
+- [x] Region selector renders correctly on multi-DPI (verified at 250% — see "Bugfix log" below)
 - [ ] Agent detection finds Codex / Gemini installed via npm + winget on Windows paths
-- [ ] Hotkey Ctrl+Shift+M registers and triggers capture
-- [ ] Region selector renders correctly on 100/125/150/200% DPI scaling
 - [ ] Tray icon (`.ico`) shows correctly in system tray; status switches work
 - [ ] Clipboard works for all output formats
 - [ ] SQLite history reads/writes under `{APPDATA}\com.sniptex.app\`
@@ -151,8 +152,31 @@ Batch B — Windows-machine validation (PENDING):
 - [ ] Theme follows Windows appearance setting
 - [ ] Autostart toggle creates/removes `HKCU\…\Run` registry key
 - [ ] Onboarding shows correct Windows install commands; verify winget package IDs
-- [ ] MSI installer builds and installs cleanly on Windows 10/11
 - [ ] App size < 20MB, RAM < 100MB idle
+
+## Bugfix log
+
+- **2026-06-05 — `xcap` coord-space mismatch on Windows (snip offset bug).**
+  At 250% Windows DPI the captured region was the wrong area of the screen.
+  Root cause: `xcap::Monitor::width/height` and `Monitor::capture_region`
+  use logical points on macOS but physical pixels on Windows, while the
+  capture pipeline assumed Mac semantics everywhere. Result: the overlay
+  was sized to 2.5× the screen and xcap was handed CSS-space coords as if
+  they were physical. Fixed in `src-tauri/src/capture/screenshot.rs` with
+  two cfg-branched normalizations — see commit `cb3b040`. Mac path
+  unchanged by construction (the `not(target_os = "windows")` branches
+  reproduce the prior expressions byte-for-byte; verified via 35 existing
+  tests still passing on macOS).
+
+## Toolchain dependency learned
+
+`scripts/windows-bootstrap.ps1` documents the full setup needed on a
+fresh Windows host. Non-obvious requirement: the `ring` crate (transitive
+dep via rustls / reqwest / tokio-tungstenite) runs perlasm-generated
+assembly through `clang` during its build script, so LLVM/Clang must be
+installed separately from VS Build Tools and explicitly added to PATH
+(the silent LLVM installer skips the add-to-PATH prompt). Bootstrap
+script handles both.
 
 ## Success Criteria
 
