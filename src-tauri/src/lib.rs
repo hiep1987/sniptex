@@ -91,16 +91,28 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Load + manage the settings store FIRST so the main webview's
+            // `fetch()` call can resolve immediately. On Windows the Win32
+            // window is created synchronously and the webview JS starts
+            // running in parallel with setup(); if storage::init runs
+            // ahead of `app.manage(settings_store)` (SQLite migrations +
+            // FTS5 setup is ~50-200ms on a fresh AppData), the IPC for
+            // `get_settings` races setup and fails with "state not
+            // managed", leaving the UI stuck on defaults until the user
+            // toggles something. On macOS NSWindow creation is slow
+            // enough that setup() wins this race naturally, so we keep
+            // the ordering optimization on every platform — load is
+            // sub-millisecond either way.
+            let settings_store = settings::SettingsStore::load(app.handle());
+            let show_onboarding = !settings_store.get().onboarding_completed;
+            app.manage(settings_store);
+
             let app_data_dir = app
                 .path()
                 .app_data_dir()
                 .expect("app_data_dir resolvable on desktop");
             let history_store = storage::init(&app_data_dir).expect("storage init failed");
             app.manage(history_store);
-
-            let settings_store = settings::SettingsStore::load(app.handle());
-            let show_onboarding = !settings_store.get().onboarding_completed;
-            app.manage(settings_store);
 
             #[cfg(desktop)]
             {
