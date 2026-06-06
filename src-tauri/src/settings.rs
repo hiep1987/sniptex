@@ -114,6 +114,18 @@ impl SettingsStore {
     pub fn load(app: &AppHandle) -> Self {
         let store = app.store(STORE_FILENAME).ok();
 
+        // tauri-plugin-store auto-loads on first access on macOS but the
+        // initial call during `setup()` on Windows can return a fresh
+        // empty store even when the file already exists on disk; the
+        // first persist later in the session causes the in-memory state
+        // to suddenly mirror disk, which surfaces as "settings revert
+        // on cold start but reappear after one change". Force a reload
+        // so cold-start reads see what's already on disk.
+        #[cfg(target_os = "windows")]
+        if let Some(ref s) = store {
+            let _ = s.reload();
+        }
+
         let settings = store
             .as_ref()
             .and_then(|s| s.get(STORE_KEY))
