@@ -24,7 +24,26 @@ use tauri::{LogicalPosition, LogicalSize};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // tauri-plugin-single-instance must be the FIRST plugin registered
+    // so the second-launch short-circuit fires before any other plugin
+    // (log, store, autostart, tray) starts allocating per-process state.
+    // The previous ordering (after 6 other plugins) was too late — the
+    // second sniptex.exe got far enough to create its own tray icon
+    // before the lock check killed it.
+    #[cfg(all(desktop, not(any(target_os = "android", target_os = "ios"))))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.show();
+                let _ = main.unminimize();
+                let _ = main.set_focus();
+            }
+        }));
+    }
+
+    let builder = builder
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -44,19 +63,6 @@ pub fn run() {
 
     #[cfg(desktop)]
     let builder = builder
-        // single-instance MUST be registered before any window-creating
-        // plugin so the second launch can short-circuit before allocating
-        // a webview or tray icon. Without this, closing the main window
-        // hides it (per the close-to-tray intercept below) but reopening
-        // the app from the Start menu or Dock spawns a fresh process and
-        // a second tray icon shows up alongside the original.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(main) = app.get_webview_window("main") {
-                let _ = main.show();
-                let _ = main.unminimize();
-                let _ = main.set_focus();
-            }
-        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
