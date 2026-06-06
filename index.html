@@ -5,6 +5,28 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SnipTeX</title>
+    <script>
+      // Pre-mount theme: apply the dark class to <html> before React mounts
+      // so cold-start doesn't flash the wrong theme while the settings IPC
+      // (which can take 1–3s on Windows ARM64 VMs while setup() finishes)
+      // is still in flight. useTheme() mirrors the user's saved theme into
+      // localStorage on every change so this script can read it next time.
+      (function () {
+        try {
+          var saved = localStorage.getItem("sniptex-theme");
+          var dark;
+          if (saved === "dark") dark = true;
+          else if (saved === "light") dark = false;
+          else
+            dark =
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          // localStorage blocked — best-effort fall through to system pref.
+        }
+      })();
+    </script>
   </head>
 
   <body>

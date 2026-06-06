@@ -11,6 +11,15 @@ export function useTheme() {
       root.classList.toggle("dark", dark);
     };
 
+    // Persist the user's choice so the inline script in index.html can
+    // pre-apply the dark class on the next cold start and avoid the
+    // light-theme flash while the settings IPC is still in flight.
+    try {
+      localStorage.setItem("sniptex-theme", theme);
+    } catch (_) {
+      // localStorage blocked — that's fine, runtime still works.
+    }
+
     if (theme === "dark") {
       apply(true);
       return;

@@ -123,27 +123,16 @@ impl SettingsStore {
         // so cold-start reads see what's already on disk.
         #[cfg(target_os = "windows")]
         if let Some(ref s) = store {
-            match s.reload() {
-                Ok(()) => log::info!("[settings-debug] store.reload() succeeded"),
-                Err(e) => log::warn!("[settings-debug] store.reload() failed: {e}"),
+            if let Err(e) = s.reload() {
+                log::warn!("settings store reload failed: {e}");
             }
         }
 
-        let raw = store.as_ref().and_then(|s| s.get(STORE_KEY));
-        log::info!(
-            "[settings-debug] raw STORE_KEY at load: present={} value={:?}",
-            raw.is_some(),
-            raw.as_ref().map(|v| v.to_string())
-        );
-
-        let settings = raw
+        let settings = store
+            .as_ref()
+            .and_then(|s| s.get(STORE_KEY))
             .and_then(|v| serde_json::from_value::<AppSettings>(v).ok())
             .unwrap_or_default();
-
-        log::info!(
-            "[settings-debug] settings after load: theme={:?} default_format={:?} history_copy_format={:?}",
-            settings.theme, settings.default_format, settings.history_copy_format
-        );
 
         Self {
             inner: Mutex::new(settings),
@@ -175,14 +164,8 @@ impl SettingsStore {
             .map_err(|e| format!("open store: {e}"))?;
         let value =
             serde_json::to_value(settings).map_err(|e| format!("serialize settings: {e}"))?;
-        log::info!(
-            "[settings-debug] persist setting STORE_KEY: theme={:?} default_format={:?}",
-            settings.theme, settings.default_format
-        );
         store.set(STORE_KEY, value);
-        let save_result = store.save().map_err(|e| format!("save store: {e}"));
-        log::info!("[settings-debug] persist save result: {:?}", save_result);
-        save_result
+        store.save().map_err(|e| format!("save store: {e}"))
     }
 }
 

@@ -1460,17 +1460,7 @@ pub fn convert_to_tex(text: String) -> String {
 
 #[tauri::command]
 pub fn get_settings(store: State<'_, SettingsStore>) -> AppSettings {
-    let settings = store.get();
-    log::info!(
-        "[settings-debug] get_settings IPC call → theme={:?} default_format={:?} history_copy_format={:?} copy_as_formats={:?} launch_at_login={} hotkey={}",
-        settings.theme,
-        settings.default_format,
-        settings.history_copy_format,
-        settings.copy_as_formats,
-        settings.launch_at_login,
-        settings.hotkey
-    );
-    settings
+    store.get()
 }
 
 #[tauri::command]
