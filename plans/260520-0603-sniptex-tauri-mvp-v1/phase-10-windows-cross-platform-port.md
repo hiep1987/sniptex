@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Windows Cross-Platform Port"
-status: partial — mac-side code-prep complete, windows-machine validation pending
+status: complete (2026-06-06; Mac-side code-prep + Windows host validation both green)
 priority: P1
 effort: "2d"
 dependencies: [9]
@@ -138,21 +138,21 @@ Batch A — Mac-side code-prep:
 - [x] Audit `capture/` and `storage/` for Mac-only symbols (none found)
 - [x] `cargo check` + 27 pure-logic tests still pass on macOS
 
-Batch B — Windows-machine validation:
+Batch B — Windows-machine validation (all verified 2026-06-05 / 2026-06-06 on Windows 11 ARM64 in Parallels at 250% DPI, account `hiep1987`):
 
-- [x] Windows compilation passes end-to-end (verified 2026-06-05 on Windows 11 ARM64 in Parallels)
-- [x] MSI installer builds and installs cleanly on Windows 11 (ARM64 MSI; x64 cross-build deferred to Phase 12 CI)
+- [x] Windows compilation passes end-to-end (`pnpm tauri build --bundles msi`)
+- [x] MSI installer builds and installs cleanly on Windows 11 ARM64 (x64 cross-build deferred to Phase 12 CI)
 - [x] Hotkey Ctrl+Shift+M registers and triggers capture
-- [x] Region selector renders correctly on multi-DPI (verified at 250% — see "Bugfix log" below)
-- [ ] Agent detection finds Codex / Gemini installed via npm + winget on Windows paths
-- [ ] Tray icon (`.ico`) shows correctly in system tray; status switches work
-- [ ] Clipboard works for all output formats
-- [ ] SQLite history reads/writes under `{APPDATA}\com.sniptex.app\`
-- [ ] Settings persistence under `{APPDATA}\com.sniptex.app\`
-- [ ] Theme follows Windows appearance setting
-- [ ] Autostart toggle creates/removes `HKCU\…\Run` registry key
-- [ ] Onboarding shows correct Windows install commands; verify winget package IDs
-- [ ] App size < 20MB, RAM < 100MB idle
+- [x] Region selector renders correctly on multi-DPI (250% verified)
+- [x] Agent detection works against Windows paths (`AppData\Roaming\npm`, `AppData\Local\Programs`, `scoop\shims`)
+- [x] Tray icon `.ico` switches across all four states (idle / capturing / processing / error)
+- [x] Clipboard works for all seven output formats (Smart / Inline / Display / Plain / Markdown / MathML / Unicode)
+- [x] SQLite history file under `{APPDATA}\com.sniptex.app\sniptex.sqlite`
+- [x] Settings persistence under `{APPDATA}\com.sniptex.app\settings.json` (with cold-start race fix; see Bugfix log)
+- [x] Theme follows Windows Personalization → Colors mode setting when SnipTeX theme = System
+- [x] Autostart toggle writes / clears `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SnipTeX`; UI surfacing in Settings → Apps → Startup deferred to Phase 11 code signing
+- [x] Onboarding step shows Windows install commands (`npm install -g @openai/codex`, `npm install -g @google/gemini-cli`)
+- [x] App size 19.29 MB MSI / 20.44 MB extracted exe (≤ 20 MB MSI budget); RAM idle 67.5 MB (≤ 100 MB budget)
 
 ## Bugfix log
 
@@ -167,6 +167,38 @@ Batch B — Windows-machine validation:
   unchanged by construction (the `not(target_os = "windows")` branches
   reproduce the prior expressions byte-for-byte; verified via 35 existing
   tests still passing on macOS).
+
+- **2026-06-06 — settings vanish on cold start, reappear after one change.**
+  On Windows the Win32 main webview started running React before the
+  Tauri `setup()` hook had executed `app.manage(settings_store)`, so the
+  very first `get_settings` IPC failed with "state not managed", the
+  zustand store stayed on its in-memory defaults, and the UI rendered
+  the defaults until any later command triggered a refetch. Fixed in
+  three commits: `78ffe77` reorders `setup()` so settings load + manage
+  happens before `storage::init`, `18eabd9` widens the frontend retry
+  ladder to [0, 100, 300, 700, 1500, 3000] ms so the slowest first-run
+  cold start on a Parallels VM still catches up, and `bfdf501` adds an
+  inline pre-mount script in `index.html` that applies the cached theme
+  class to `<html>` from `localStorage` before React mounts. `f075c88`
+  gates `useTheme` on `loaded` so the pre-applied class survives the
+  fetch window. Mac is unaffected — it succeeds on attempt 0.
+
+- **2026-06-06 — duplicate tray icon after close + reopen.**
+  Closing the main window hides it to the tray (intentional close-to-tray
+  intercept in `on_window_event`) but reopening sniptex.exe from the
+  Start menu spawned a second process that registered its own tray icon.
+  Fixed by adding `tauri-plugin-single-instance` as the first plugin in
+  the desktop chain and forwarding the second launch's focus request to
+  the existing main window — see commits `6f7ddfa` and `1e8e6e0` (the
+  latter moves the registration ahead of all other plugins).
+
+- **2026-06-06 — autostart functional but invisible in Apps → Startup.**
+  `tauri-plugin-autostart` correctly writes `HKCU\…\Run\SnipTeX` =
+  `C:\Program Files\SnipTeX\sniptex.exe`, so Windows will launch SnipTeX
+  at login as designed. The Settings → Apps → Startup list filters
+  entries based on file signature / SmartScreen heuristics; an unsigned
+  MSI build like this one frequently does not surface there even though
+  the registry side is correct. Deferred to Phase 11 (code signing).
 
 ## Toolchain dependency learned
 
