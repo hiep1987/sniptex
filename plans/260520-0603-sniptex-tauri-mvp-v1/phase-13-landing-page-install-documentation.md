@@ -1,11 +1,46 @@
 ---
 phase: 13
 title: "Landing Page & Install Documentation"
-status: pending
+status: mvp-scaffolded
 priority: P2
 effort: "2d"
 dependencies: [12]
+completed: "2026-06-08"
 ---
+
+## Status — 2026-06-08
+
+✅ **Astro project at `site/`** (NOT `docs/` as plan originally said — keeps docs/ for engineering markdown)
+✅ **6 of 9 components shipped**: Hero, DownloadButtons, InstallGuide, VietnameseSEO, DonateBadges, Footer (+ BaseLayout)
+✅ **GitHub Pages deploy workflow** (`.github/workflows/deploy-pages.yml`): push-to-main on `site/**`, uses `actions/upload-pages-artifact@v3` + `actions/deploy-pages@v4`
+✅ **Build verified locally**: 20 KB index.html + 20 KB CSS + 480 B favicon (under <500 KB target)
+✅ **Code review** by `code-reviewer` agent: 2 Critical + 3 High + 4 Medium findings — C1/C2/H2 fixed pre-commit
+   (see `reports/reviewer-260608-phase-13-landing.md`)
+
+⏸ **HowItWorks** (3-step walkthrough) — defer to follow-up round
+⏸ **FeatureGrid** (6-cell feature highlights) — defer
+⏸ **DemoVideo** — Phase 14 ships the video first
+⏸ **OG image, screenshots, demo-poster** — `ui-ux-designer` agent round
+⏸ **MDX install content collections** — current install-guide.astro inlines copy; revisit if drift grows
+⏸ **Lighthouse audit ≥95** — needs live deploy + Chrome
+⏸ **Cross-browser smoke test** — needs live deploy
+⏸ **Repo Settings → Pages source = "GitHub Actions"** — user-driven one-time toggle (documented in `docs/releasing.md`?)
+⏸ **Aspirational install commands** (`brew install --cask sniptex`, PowerShell `irm | iex`) — marked "SOON" badge until v0.1.0 launch, Phase 15 owns the actual tap + script
+
+**Artifacts produced this round:**
+- `site/` (new Astro project): package.json, astro.config.mjs, tailwind.config.mjs, tsconfig.json, .gitignore
+- `site/src/layouts/base-layout.astro`
+- `site/src/components/{hero,download-buttons,install-guide,vietnamese-seo,donate-badges,footer}.astro`
+- `site/src/pages/index.astro`
+- `site/src/styles/global.css`
+- `site/public/favicon.svg`
+- `.github/workflows/deploy-pages.yml`
+
+**Deferred review findings (not fixed this round, tracked):**
+- H1: `og-image.png` referenced but missing → social shares 404. Fix when ui-ux-designer round generates real assets.
+- H3: install-guide.astro slightly diverges from `docs/install-guide.md` (Smart App Control trade-off line missing checksum verify + Reputation-based protection fallback). Sync when adding MDX content collections.
+- M1: clipboard Copy button visible on touch via `sm:opacity-0` (fix applied to BOTH brew + PowerShell blocks); MVP good.
+- M2-M4: canonical URL trailing-slash, hreflang for VN, Pages source toggle — track for v0.1.0 polish.
 
 # Phase 13: Landing Page & Install Documentation
 
@@ -123,22 +158,22 @@ docs/                            (Astro project, deployed to gh-pages root)
 
 ## Todo List
 
-- [ ] Scaffold Astro project under docs/
-- [ ] Configure astro.config with GH Pages base + Tailwind + MDX
-- [ ] Build BaseLayout with SEO meta + OG tags
-- [ ] Build Hero with H1 + tagline + CTAs
-- [ ] Build DemoVideo with YouTube lazy-load + poster
-- [ ] Build HowItWorks 3-step section with screenshots
-- [ ] Build FeatureGrid 6-cell
-- [ ] Build DownloadButtons with OS detection + brew/winget code blocks
-- [ ] Build InstallGuide with MDX content per OS + accordion
-- [ ] Build VietnameseSEO section with keyword-targeted copy
-- [ ] Build DonateBadges (OC + Sponsors + Apple fund progress)
-- [ ] Build Footer
-- [ ] Create OG image, screenshots, demo-poster
-- [ ] Set up GH Pages deploy workflow
-- [ ] Lighthouse audit ≥95 Performance
-- [ ] Cross-browser smoke test
+- [x] Scaffold Astro project under site/ (moved from docs/ — docs/ stays for engineering markdown)
+- [x] Configure astro.config with GH Pages base + Tailwind + MDX
+- [x] Build BaseLayout with SEO meta + OG tags (placeholder og-image.png)
+- [x] Build Hero with H1 + tagline + CTAs
+- [ ] Build DemoVideo with YouTube lazy-load + poster — deferred until Phase 14 video lands
+- [ ] Build HowItWorks 3-step section with screenshots — deferred
+- [ ] Build FeatureGrid 6-cell — deferred
+- [x] Build DownloadButtons with OS detection + brew/winget code blocks (aspirational commands marked "SOON")
+- [x] Build InstallGuide with inline copy per OS (MDX content collections deferred)
+- [x] Build VietnameseSEO section with keyword-targeted copy
+- [x] Build DonateBadges (OC + Sponsors + Apple fund progress)
+- [x] Build Footer
+- [ ] Create OG image, screenshots, demo-poster — defer to ui-ux-designer round
+- [x] Set up GH Pages deploy workflow
+- [ ] Lighthouse audit ≥95 Performance — needs live deploy
+- [ ] Cross-browser smoke test — needs live deploy
 
 ## Success Criteria
 
