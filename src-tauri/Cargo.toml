@@ -6,21 +6,10 @@ authors = ["SnipTeX contributors"]
 license = "MIT"
 edition = "2021"
 default-run = "sniptex"
-autobins = false
-
-[features]
-default = []
-# Enables the development/diagnostic binaries under src/bin/.
-# Off in release builds so they don't ship inside the .app/.msi bundles.
-dev-bins = []
 
 [lib]
 name = "sniptex_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-[[bin]]
-name = "sniptex"
-path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "=2.6.2", features = [] }
@@ -71,35 +60,32 @@ core-foundation = "0.10"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
-[[bin]]
+# Smoke / diagnostic binaries live under examples/ so Tauri doesn't
+# bundle them into the production .app/.msi. Run via:
+#   cargo run --example pdf_smoke
+[[example]]
 name = "cli_test"
-path = "src/bin/cli_test.rs"
-required-features = ["dev-bins"]
+path = "examples/cli_test.rs"
 
-[[bin]]
+[[example]]
 name = "history_smoke"
-path = "src/bin/history_smoke.rs"
-required-features = ["dev-bins"]
+path = "examples/history_smoke.rs"
 
-[[bin]]
+[[example]]
 name = "pdf_smoke"
-path = "src/bin/pdf_smoke.rs"
-required-features = ["dev-bins"]
+path = "examples/pdf_smoke.rs"
 
-[[bin]]
+[[example]]
 name = "novita_hybrid_smoke"
-path = "src/bin/novita_hybrid_smoke.rs"
-required-features = ["dev-bins"]
+path = "examples/novita_hybrid_smoke.rs"
 
-[[bin]]
+[[example]]
 name = "novita_smoke"
-path = "src/bin/novita_smoke.rs"
-required-features = ["dev-bins"]
+path = "examples/novita_smoke.rs"
 
-[[bin]]
+[[example]]
 name = "tabular_e2e_smoke"
-path = "src/bin/tabular_e2e_smoke.rs"
-required-features = ["dev-bins"]
+path = "examples/tabular_e2e_smoke.rs"
 
 
 [[test]]
