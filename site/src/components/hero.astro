@@ -1,0 +1,46 @@
+---
+const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
+---
+
+<section class="relative overflow-hidden border-b border-ink-200 bg-gradient-to-b from-blue-50 via-white to-white pt-16 pb-20 sm:pt-24 sm:pb-28 dark:border-ink-800 dark:from-ink-900 dark:via-ink-950 dark:to-ink-950">
+  <div class="container-wide">
+    <div class="mx-auto max-w-3xl text-center">
+      <span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+        <span class="inline-block size-1.5 rounded-full bg-blue-500"></span>
+        Free OCR snip tool · MIT licensed
+      </span>
+      <h1 class="mt-6 text-4xl font-bold tracking-tight text-ink-950 sm:text-5xl md:text-6xl dark:text-white">
+        Snip a region.
+        <br />
+        <span class="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+          Get LaTeX or Markdown.
+        </span>
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-ink-600 dark:text-ink-300">
+        <strong>Bring your own agent</strong> (Codex CLI / Gemini CLI) <strong>or your own Gemini API key.</strong>
+        A free, open-source alternative to Mathpix Snip for technical writers,
+        students, and Vietnamese teachers working with SGK Toán.
+      </p>
+
+      <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <a href={releasesLatest} class="btn-primary">
+          <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          </svg>
+          Download for Mac
+        </a>
+        <a href={releasesLatest} class="btn-secondary">
+          Download for Windows
+        </a>
+        <a href="#how-it-works" class="text-sm font-medium text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100">
+          How it works ↓
+        </a>
+      </div>
+
+      <p class="mt-6 text-xs text-ink-500 dark:text-ink-400">
+        v0.x ships Apple Silicon (M1+) + Windows x64. Intel Mac on the
+        roadmap. Linux community-supported.
+      </p>
+    </div>
+  </div>
+</section>

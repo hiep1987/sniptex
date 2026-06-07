@@ -1,0 +1,12 @@
+# Astro build artifacts + dependencies
+node_modules/
+dist/
+.astro/
+
+# Local dev caches
+.cache/
+.DS_Store
+
+# Editor state
+.vscode/
+.idea/
