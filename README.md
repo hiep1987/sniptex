@@ -14,16 +14,17 @@ SGK textbook content.
 
 ## Platform support
 
-| Platform | Architecture | Format | v0.1.0 status |
-|----------|--------------|--------|---------------|
+| Platform | Architecture | Format | v0.x status |
+|----------|--------------|--------|-------------|
 | macOS 12+ | Apple Silicon | `.dmg` (ad-hoc signed) + Homebrew Cask | shipping |
-| macOS 12+ | Intel (x86_64) | `.dmg` (ad-hoc signed) | shipping via CI from v0.2.0 |
-| Windows 11 | x64 | `.msi` (unsigned, SmartScreen workaround) | shipping via CI from v0.2.0 |
-| Windows 11 | ARM64 | `.msi` | shipping via CI from v0.2.0 |
+| Windows 11 | x64 | `.msi` (unsigned, SmartScreen workaround) | shipping via CI |
+| macOS 12+ | Intel (x86_64) | — | deferred (no free Intel GH runner) |
+| Windows 11 | ARM64 | — | deferred (post-v1.0) |
 
-v0.1.0 ships the Apple Silicon DMG from a developer build. Intel Mac and
-Windows builds land with v0.2.0 once the CI release pipeline (Phase 12)
-publishes them.
+v0.x ships Apple Silicon Mac + Windows x64 only. Intel Mac requires a
+paid GitHub Larger Runner since `macos-13` retired in December 2025;
+we'll revisit once donations cover the runner cost or cross-compile
+becomes reliable.
 
 ## Install
 

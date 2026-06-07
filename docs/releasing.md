@@ -63,9 +63,14 @@ three parallel build jobs:
 
 | Runner | Target | Artifact |
 |--------|--------|----------|
-| `macos-14` | `aarch64-apple-darwin` | `SnipTeX_X.Y.Z_aarch64.dmg` + `.app.tar.gz` + `.app.tar.gz.sig` |
-| `macos-13` | `x86_64-apple-darwin` | `SnipTeX_X.Y.Z_x64.dmg` + `.app.tar.gz` + `.app.tar.gz.sig` |
+| `macos-latest` | `aarch64-apple-darwin` | `SnipTeX_X.Y.Z_aarch64.dmg` + `.app.tar.gz` + `.app.tar.gz.sig` |
 | `windows-latest` | `x86_64-pc-windows-msvc` | `SnipTeX_X.Y.Z_x64-setup.msi` + `.msi.zip` + `.msi.zip.sig` |
+
+> **Intel Mac dropped.** v0.x ships Apple Silicon only. GitHub's free Mac
+> runners are ARM (`macos-latest`); the Intel labels (`macos-13` retired,
+> `macos-13-large` / `macos-15-large` paid) aren't viable. Revisit when
+> we move to a paid plan or cross-compile becomes worth the
+> bundle-flakiness trade-off.
 
 Then `checksums` job downloads all of the above and uploads
 `checksums.txt` to the same draft release.
@@ -138,8 +143,8 @@ download fresh from GitHub Releases. Then proceed with a new keypair:
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | Release workflow fails on `tauri-action` step with "signing key missing" | GitHub Secrets not set | Add the two `TAURI_SIGNING_PRIVATE_KEY*` Secrets and re-run |
-| Mac Intel job (`macos-15`) deprecated by GitHub | Image deprecation cycle | Bump to the next macos-NN Intel image; macos-26 is next |
-| Mac ARM job (`macos-15-arm64`) deprecated by GitHub | Image deprecation cycle | Bump to the next macos-NN-arm64 image; macos-26-arm64 is next |
+| Mac ARM job stalls in `queued` indefinitely | `runs-on:` label points to a Larger-Runner-only image (e.g. `macos-15-arm64`) | Use `macos-latest` (free-tier ARM). Larger Runner labels need paid billing. |
+| Mac runner image deprecated by GitHub | Image deprecation cycle | `macos-latest` always tracks the current default. Pin to `macos-NN` if you need reproducibility. |
 | Windows build fails on WiX install step | Missing WiX prerequisites on `windows-latest` | Add `wix-toolset` action before tauri-action |
 | `latest.json` missing from release | `includeUpdaterJson: true` flag removed | Re-add to `release.yml` |
 | In-app "Check for updates" shows "Update check unavailable" before first release | Endpoint URL 404s because no release published yet | Expected pre-launch; goes away after first release tag |

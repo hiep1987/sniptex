@@ -14,14 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macos-15-arm64 = Apple Silicon (current). macos-14 deprecates Nov 2026.
-          - os: macos-15-arm64
+          # macos-latest = Apple Silicon on the free public-repo tier.
+          # Intel Mac builds were dropped: macos-13 is retired and the only
+          # remaining Intel labels (macos-13-large / macos-15-large) require
+          # paid Larger Runners. v0.x ships Apple Silicon only.
+          - os: macos-latest
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
-          # macos-15 = Intel (current). macos-13 was retired Dec 2025.
-          - os: macos-15
-            target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc

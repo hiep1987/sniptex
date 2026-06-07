@@ -39,7 +39,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-arm64, windows-latest]
+        # macos-latest = Apple Silicon (free tier). Larger-runner ARM
+        # labels (macos-15-arm64, macos-14-xlarge, …) require paid
+        # billing and stall in `queued` on free public repos.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:

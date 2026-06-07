@@ -29,8 +29,10 @@ Launch from Spotlight (`⌘ Space`, type "SnipTeX") or `/Applications`.
 
 ### Option B — DMG download
 
-> v0.1.0 ships **Apple Silicon only** (`aarch64.dmg`). Intel Mac DMGs
-> land with v0.2.0 from the CI release pipeline.
+> v0.x ships **Apple Silicon only** (`aarch64.dmg`). Intel Mac builds
+> are deferred indefinitely — GitHub's free Mac runner is ARM and the
+> only Intel options (`macos-13` retired Dec 2025, `macos-13-large` /
+> `macos-15-large` paid) aren't viable right now.
 
 1. Download `SnipTeX_<version>_aarch64.dmg` from the
    [Releases page](https://github.com/hiep1987/sniptex/releases).

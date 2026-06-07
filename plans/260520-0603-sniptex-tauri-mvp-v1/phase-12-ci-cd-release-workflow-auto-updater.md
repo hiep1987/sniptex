@@ -11,7 +11,7 @@ completed: "2026-06-07"
 ## Status — 2026-06-07
 
 ✅ **CI workflow** (`.github/workflows/ci.yml`): js + rust matrix (ubuntu / macos-15-arm64 / windows-latest), advisory clippy
-✅ **Release workflow** (`.github/workflows/release.yml`): tag-triggered, 3-runner matrix (macos-15-arm64 / macos-15 / windows-latest), SHA-pinned tauri-action@v0.6.2, includeUpdaterJson, separate checksums job
+✅ **Release workflow** (`.github/workflows/release.yml`): tag-triggered, 2-runner matrix (`macos-latest` ARM + `windows-latest`), SHA-pinned tauri-action@v0.6.2, includeUpdaterJson, separate checksums job. Intel Mac dropped after the v0.0.1-test run revealed `macos-15-arm64` + `macos-15` stall in `queued` (Larger Runner labels require paid billing)
 ✅ **Updater config** (`src-tauri/tauri.conf.json`): endpoints + real ed25519 pubkey wired
 ✅ **Updater plugin** already registered (`lib.rs:66` + `capabilities/default.json:30`)
 ✅ **UpdateDialog** (`src/components/update-dialog.tsx`): modal portal, download progress, Escape-to-dismiss, focus-on-mount

@@ -37,7 +37,7 @@ Free alternative to Mathpix Snip ($5-20/mo) for Mac + Windows. Hotkey-triggered 
 | 9 | [Theme & Format Toggle & UX Polish](./phase-09-theme-format-toggle-ux-polish.md) | ✅ Implementation Complete (2026-06-01; formats, tabular validation, theme, sound, animations, Toast, rapid-snip queue) |
 | 10 | [Windows Cross-Platform Port](./phase-10-windows-cross-platform-port.md) | ✅ Complete (2026-06-06; Mac-side code-prep + Windows 11 ARM64 validation both green, all 13 Batch B checks signed off) |
 | 11 | [Distribution: Code Signing & Installers](./phase-11-distribution-code-signing-installers.md) | ✅ ARM Complete (2026-06-06; Mac ARM DMG + ad-hoc sign + Cask + install-guide + README; Mac Intel + Windows MSI deferred to Phase 12 CI) |
-| 12 | [CI/CD Release Workflow & Auto-Updater](./phase-12-ci-cd-release-workflow-auto-updater.md) | ✅ Scaffolded (2026-06-07; CI + release workflows + updater config + UpdateDialog + AboutTab + checksums + dev-bin gating + releasing.md; first tag push + Secrets setup deferred to user) |
+| 12 | [CI/CD Release Workflow & Auto-Updater](./phase-12-ci-cd-release-workflow-auto-updater.md) | ✅ Scaffolded (2026-06-07; CI + release workflows + updater config + UpdateDialog + AboutTab + checksums + dev-bin gating + releasing.md; v0.0.1-test run forced ARM-only scope after Larger Runner labels stalled in queued — Intel Mac dropped for v0.x) |
 | 13 | [Landing Page & Install Documentation](./phase-13-landing-page-install-documentation.md) | Pending |
 | 14 | [Demo Video & Marketing Assets](./phase-14-launch-demo-video.md) | Pending |
 | 15 | [Package Managers & Soft Launch](./phase-15-packages-marketing.md) | Pending |
