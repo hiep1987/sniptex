@@ -196,7 +196,10 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     set_if_some(&mut settings.sound_on_success, patch.sound_on_success);
     set_if_some(&mut settings.launch_at_login, patch.launch_at_login);
     set_if_some(&mut settings.theme, patch.theme);
-    set_if_some(&mut settings.onboarding_completed, patch.onboarding_completed);
+    set_if_some(
+        &mut settings.onboarding_completed,
+        patch.onboarding_completed,
+    );
     set_if_some(&mut settings.cloud_mode_enabled, patch.cloud_mode_enabled);
 }
 

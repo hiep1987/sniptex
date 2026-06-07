@@ -146,10 +146,7 @@ pub fn run() {
                     .map(|m| {
                         let size = m.size();
                         let scale = m.scale_factor();
-                        (
-                            (size.width as f64) / scale,
-                            (size.height as f64) / scale,
-                        )
+                        ((size.width as f64) / scale, (size.height as f64) / scale)
                     })
                     .unwrap_or((1440.0, 900.0));
                 let _ = overlay.set_position(LogicalPosition::new(0.0, 0.0));

@@ -176,11 +176,7 @@ async fn call_gpt_oss_cleanup(
 /// the output side means GPT invented content; reject so the dispatcher can
 /// fall back to a non-hallucinating agent.
 pub fn looks_hallucinated(source: &str, output: &str) -> bool {
-    const SUSPICIOUS: &[&str] = &[
-        "\\boxed{",
-        "\\bar{",
-        "\\begin{aligned}",
-    ];
+    const SUSPICIOUS: &[&str] = &["\\boxed{", "\\bar{", "\\begin{aligned}"];
     SUSPICIOUS
         .iter()
         .any(|pattern| output.contains(pattern) && !source.contains(pattern))
