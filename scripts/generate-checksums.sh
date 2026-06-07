@@ -40,12 +40,14 @@ TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
 # Match the artifacts tauri-action emits. Skip the checksums file itself
-# in case this is re-run.
+# in case this is re-run. Stay in the caller's CWD so $OUT (which may be
+# a relative path like "artifacts/checksums.txt") resolves correctly.
 shopt -s nullglob
-cd "$DIR"
-for f in *.dmg *.msi *.app.tar.gz *.msi.zip *.nsis.zip; do
-  [[ "$f" == "checksums.txt" ]] && continue
-  $HASH_CMD "$f" >> "$TMP"
+for f in "$DIR"/*.dmg "$DIR"/*.msi "$DIR"/*.app.tar.gz "$DIR"/*.msi.zip "$DIR"/*.nsis.zip; do
+  base="$(basename "$f")"
+  [[ "$base" == "checksums.txt" ]] && continue
+  # Print just the basename next to the hash, not the full path.
+  (cd "$DIR" && $HASH_CMD "$base") >> "$TMP"
 done
 
 if [[ ! -s "$TMP" ]]; then

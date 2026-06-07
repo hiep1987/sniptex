@@ -66,6 +66,35 @@ jobs:
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
+      # tauri-action@v0.6.2 generates .sig + .nsis.zip but silently skips
+      # uploading them ("Signature not found for the updater JSON. Skipping
+      # upload..."). Re-upload them explicitly so the checksums job can
+      # build latest.json.
+      - name: upload mac updater payload + sig
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUNDLE=src-tauri/target/aarch64-apple-darwin/release/bundle/macos
+          for f in "$BUNDLE/SnipTeX.app.tar.gz.sig"; do
+            if [ -f "$f" ]; then
+              gh release upload "${{ github.ref_name }}" "$f" --clobber
+            fi
+          done
+
+      - name: upload windows updater payload + sig
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUNDLE=src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+          for f in "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip.sig; do
+            if [ -f "$f" ]; then
+              gh release upload "${{ github.ref_name }}" "$f" --clobber
+            fi
+          done
+
   checksums:
     name: checksums
     runs-on: ubuntu-latest
@@ -87,3 +116,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" artifacts/checksums.txt --clobber
+
+      # Tauri 2's updater plugin needs a `latest.json` manifest. tauri-action
+      # advertises `includeUpdaterJson: true` but doesn't actually generate
+      # it for the Tauri 2 config schema; do it manually from the .sig files
+      # we uploaded above.
+      - name: generate + upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/generate-latest-json.sh "${{ github.ref_name }}" artifacts
