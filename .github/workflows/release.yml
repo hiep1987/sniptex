@@ -70,40 +70,51 @@ jobs:
       # uploading them ("Signature not found for the updater JSON. Skipping
       # upload..."). Re-upload them explicitly so the checksums job can
       # build latest.json.
-      - name: upload mac updater payload + sig
+      # tauri-action@v0.6.2 generates .app.tar.gz / .nsis.zip and their
+      # .sig files but silently consumes the sigs without uploading them
+      # against the Tauri 2 config schema. Re-sign explicitly using the
+      # private key (already in env) and upload the .sig alongside the
+      # payload that tauri-action did upload.
+      - name: sign + upload mac updater sig
         if: matrix.os == 'macos-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           BUNDLE="${{ github.workspace }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
-          echo "BUNDLE=$BUNDLE"
-          ls -la "$BUNDLE/" || true
-          for f in "$BUNDLE/SnipTeX.app.tar.gz.sig"; do
-            if [ -f "$f" ]; then
-              echo "uploading: $f"
-              gh release upload "${{ github.ref_name }}" "$f" --clobber
-            else
-              echo "missing: $f"
-            fi
-          done
+          PAYLOAD="$BUNDLE/SnipTeX.app.tar.gz"
+          if [ ! -f "$PAYLOAD" ]; then
+            echo "missing payload, cannot sign"
+            ls -la "$BUNDLE/" || true
+            exit 1
+          fi
+          npx tauri signer sign --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" "$PAYLOAD"
+          ls -la "$BUNDLE/"
+          gh release upload "${{ github.ref_name }}" "$PAYLOAD.sig" --clobber
 
-      - name: upload windows updater payload + sig
+      - name: zip + sign + upload windows updater
         if: matrix.os == 'windows-latest'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           BUNDLE="${{ github.workspace }}/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
-          echo "BUNDLE=$BUNDLE"
-          ls -la "$BUNDLE/" || true
-          for f in "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip.sig; do
-            if [ -f "$f" ]; then
-              echo "uploading: $f"
-              gh release upload "${{ github.ref_name }}" "$f" --clobber
-            else
-              echo "missing: $f"
-            fi
-          done
+          EXE=$(ls "$BUNDLE"/SnipTeX_*_x64-setup.exe 2>/dev/null | head -1)
+          if [ -z "$EXE" ] || [ ! -f "$EXE" ]; then
+            echo "missing exe, cannot zip/sign"
+            ls -la "$BUNDLE/" || true
+            exit 1
+          fi
+          # Tauri 2 updater for NSIS expects <name>.nsis.zip alongside the
+          # .exe; produce it via powershell since we're on Windows runner.
+          ZIP="${EXE%.exe}.nsis.zip"
+          powershell -Command "Compress-Archive -Path '$EXE' -DestinationPath '$ZIP' -Force"
+          npx tauri signer sign --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" "$ZIP"
+          ls -la "$BUNDLE/"
+          gh release upload "${{ github.ref_name }}" "$ZIP" "$ZIP.sig" --clobber
 
   checksums:
     name: checksums
