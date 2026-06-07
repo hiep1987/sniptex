@@ -91,7 +91,11 @@ jobs:
           fi
           npx tauri signer sign --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" "$PAYLOAD"
           ls -la "$BUNDLE/"
-          gh release upload "${{ github.ref_name }}" "$PAYLOAD.sig" --clobber
+          # tauri-action uploads the payload as `SnipTeX_aarch64.app.tar.gz`
+          # (target arch infix added). Rename the sig to match so the
+          # latest.json generator + Tauri updater find the right pair.
+          gh release upload "${{ github.ref_name }}" \
+            "$PAYLOAD.sig#SnipTeX_aarch64.app.tar.gz.sig" --clobber
 
       - name: zip + sign + upload windows updater
         if: matrix.os == 'windows-latest'
