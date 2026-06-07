@@ -67,7 +67,9 @@ jobs:
             libpipewire-0.3-dev \
             libdbus-1-dev \
             libxcb-shape0-dev \
-            libxcb-xfixes0-dev
+            libxcb-xfixes0-dev \
+            libgbm-dev \
+            libegl1-mesa-dev
 
       - uses: Swatinem/rust-cache@v2
         with:
