@@ -1,0 +1,7 @@
+| Hợp chất | Công thức | Khối lượng mol | Trạng thái |
+|---|---|---|---|
+| Nước | $H_2O$ | 18.02 g/mol | Lỏng |
+| Axit sunfuric | $H_2SO_4$ | 98.08 g/mol | Lỏng |
+| Natri clorua | $NaCl$ | 58.44 g/mol | Rắn |
+| Amoniac | $NH_3$ | 17.03 g/mol | Khí |
+| Glucose | $C_6H_{12}O_6$ | 180.16 g/mol | Rắn |

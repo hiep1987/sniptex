@@ -109,6 +109,12 @@ fixtures/
 fixtures-*/
 plans/results/
 plans/results-*/
+# Exception: codex/ texts under round3-table-only are baked into
+# tests/rust/ocr_tabular_test.rs via include_str! and must be checked in
+# for CI test builds to compile.
+!plans/results-round3-table-only/
+!plans/results-round3-table-only/codex/
+!plans/results-round3-table-only/codex/*.txt
 results/
 # Stray test PDFs at repo root used during manual OCR debugging
 /test-*.pdf
