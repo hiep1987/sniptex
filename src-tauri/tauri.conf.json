@@ -138,10 +138,10 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "endpoints": [],
-      "pubkey": "",
-      "dialog": true
+      "endpoints": [
+        "https://github.com/hiep1987/sniptex/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEyN0FGMDA2NTNCREJGMjUKUldRbHY3MVRCdkI2b3IxRHFEWTI0b1QvVXpZT0ZGRk5IZitiMzg0WTRzSHZ6aThuZEx1UnphUUsK"
     }
   }
 }
