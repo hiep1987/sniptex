@@ -75,10 +75,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BUNDLE=src-tauri/target/aarch64-apple-darwin/release/bundle/macos
+          BUNDLE="${{ github.workspace }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
+          echo "BUNDLE=$BUNDLE"
+          ls -la "$BUNDLE/" || true
           for f in "$BUNDLE/SnipTeX.app.tar.gz.sig"; do
             if [ -f "$f" ]; then
+              echo "uploading: $f"
               gh release upload "${{ github.ref_name }}" "$f" --clobber
+            else
+              echo "missing: $f"
             fi
           done
 
@@ -88,10 +93,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BUNDLE=src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+          BUNDLE="${{ github.workspace }}/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          echo "BUNDLE=$BUNDLE"
+          ls -la "$BUNDLE/" || true
           for f in "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip "$BUNDLE"/SnipTeX_*_x64-setup.nsis.zip.sig; do
             if [ -f "$f" ]; then
+              echo "uploading: $f"
               gh release upload "${{ github.ref_name }}" "$f" --clobber
+            else
+              echo "missing: $f"
             fi
           done
 
