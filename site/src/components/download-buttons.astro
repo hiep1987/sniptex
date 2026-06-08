@@ -35,28 +35,9 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
         <a href={releasesLatest} class="btn-primary mt-4 w-full">
           Download .dmg
         </a>
-        <div class="mt-4">
-          <p class="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
-            Or install via Homebrew
-            <span class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-              soon
-            </span>
-          </p>
-          <div class="code-block group mt-2 opacity-70">
-            <code id="brew-cmd">brew install --cask sniptex</code>
-            <button
-              type="button"
-              data-copy-target="brew-cmd"
-              class="absolute top-2 right-2 rounded px-2 py-0.5 text-xs text-ink-500 opacity-100 hover:bg-ink-200 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:bg-ink-700"
-              aria-label="Copy command"
-            >
-              Copy
-            </button>
-          </div>
-          <p class="mt-1 text-[11px] text-ink-500 dark:text-ink-400">
-            Homebrew Cask tap goes live at v0.1.0 launch.
-          </p>
-        </div>
+        <p class="mt-3 text-[11px] text-ink-500 dark:text-ink-400">
+          Homebrew Cask coming with the v0.1.0 launch.
+        </p>
       </div>
 
       <div class="rounded-xl border border-ink-200 bg-white p-6 shadow-sm dark:border-ink-700 dark:bg-ink-900">
@@ -74,28 +55,9 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
         <a href={releasesLatest} class="btn-primary mt-4 w-full">
           Download .msi
         </a>
-        <div class="mt-4">
-          <p class="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
-            Or fetch with PowerShell
-            <span class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-              soon
-            </span>
-          </p>
-          <div class="code-block group mt-2 opacity-70">
-            <code id="ps-cmd">irm https://hiep1987.github.io/sniptex/install.ps1 | iex</code>
-            <button
-              type="button"
-              data-copy-target="ps-cmd"
-              class="absolute top-2 right-2 rounded px-2 py-0.5 text-xs text-ink-500 opacity-100 hover:bg-ink-200 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:bg-ink-700"
-              aria-label="Copy command"
-            >
-              Copy
-            </button>
-          </div>
-          <p class="mt-1 text-[11px] text-ink-500 dark:text-ink-400">
-            PowerShell installer goes live at v0.1.0 launch.
-          </p>
-        </div>
+        <p class="mt-3 text-[11px] text-ink-500 dark:text-ink-400">
+          One-line PowerShell installer coming with the v0.1.0 launch.
+        </p>
       </div>
     </div>
 
@@ -124,25 +86,4 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
     });
   }
   highlightOsButton();
-
-  document
-    .querySelectorAll<HTMLButtonElement>("[data-copy-target]")
-    .forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.dataset.copyTarget;
-        if (!id) return;
-        const el = document.getElementById(id);
-        if (!el?.textContent) return;
-        try {
-          await navigator.clipboard.writeText(el.textContent.trim());
-          const original = btn.textContent;
-          btn.textContent = "Copied";
-          setTimeout(() => {
-            btn.textContent = original;
-          }, 1500);
-        } catch (_) {
-          // clipboard API blocked — fall back silently
-        }
-      });
-    });
 </script>
