@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { tauri, type HelloReply, type SnipResult } from "@/lib/invoke";
 import { useHotkeyStore } from "@/state/hotkey-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { strings } from "@/strings";
 
 /**
@@ -32,6 +33,12 @@ export default function App() {
   const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
   const [pdfCancelling, setPdfCancelling] = useState(false);
   const { pressCount, lastPressedAt } = useHotkeyStore();
+  const hotkey = useSettingsStore((s) => s.hotkey);
+  const hotkeyDisplay = hotkey
+    .replace("Command", "⌘")
+    .replace("Control", "Ctrl")
+    .replace("Shift", "⇧")
+    .replace("Alt", "⌥");
 
   useEffect(() => {
     tauri.hello(strings.app.name).then(setHello).catch(console.error);
@@ -190,7 +197,7 @@ export default function App() {
           Or press{" "}
           <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] dark:bg-slate-800">
             <Keyboard className="mr-1 inline size-3" />
-            Cmd/Ctrl + Shift + M
+            {hotkeyDisplay}
           </kbd>{" "}
           anywhere.
         </p>
