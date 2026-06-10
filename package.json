@@ -1,7 +1,7 @@
 {
   "name": "sniptex",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "description": "Free, open-source, cross-platform OCR snip tool (Mac + Windows) for LaTeX and Markdown. Bring your own agent or API key.",
   "license": "MIT",

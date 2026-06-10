@@ -1,6 +1,6 @@
 [package]
 name = "sniptex"
-version = "0.0.2"
+version = "0.0.3"
 description = "Free, open-source, cross-platform OCR snip tool for LaTeX and Markdown"
 authors = ["SnipTeX contributors"]
 license = "MIT"
