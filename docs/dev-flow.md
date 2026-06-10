@@ -68,7 +68,7 @@ git push origin v0.0.2-dev
 Vào `https://github.com/hiep1987/sniptex/releases`:
 
 1. Thấy draft "SnipTeX v0.0.2-dev" → click **Edit**
-2. (Optional) viết release notes
+2. Paste release notes (template bên dưới)
 3. ✅ **Tick "Set as a pre-release"**
 4. Click **Publish release**
 
@@ -78,6 +78,29 @@ Lý do tick pre-release:
   bị auto-update lên dev build
 - `/releases/latest` endpoint **không bao gồm pre-release** → các Cask
   formula / installer script trỏ tới `/releases/latest` không bị broken
+
+#### Release notes template (paste & edit per release)
+
+```markdown
+### Changes
+<!-- 1-3 bullets, what's new since the previous dev tag -->
+
+### Known quirk on update (macOS)
+
+Vì SnipTeX hiện ad-hoc signed (chưa có Apple Developer ID), mỗi dev build
+có signature khác nhau. Nếu bạn từng grant Screen Recording cho bản
+trước, sau khi cài bản mới đè lên macOS có thể **vẫn prompt** dù toggle
+đang ON trong System Settings → Privacy & Security → Screen & System Audio
+Recording. Đó là TCC entry bị stale.
+
+**Fix:** chọn SnipTeX trong list → click **−** → click **+** → add lại
+`/Applications/SnipTeX.app` → toggle ON → quit và mở lại app.
+
+Sẽ hết khi SnipTeX có Developer ID stable cert (planned post v0.1.0).
+```
+
+Khi v0.1.0 stable ship với Developer ID → xoá luôn section "Known quirk"
+khỏi template, không cần paste nữa.
 
 ### 4. User vào landing thấy gì
 
