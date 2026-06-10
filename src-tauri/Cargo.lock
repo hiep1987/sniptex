@@ -4966,7 +4966,7 @@ dependencies = [
 
 [[package]]
 name = "sniptex"
-version = "0.1.0"
+version = "0.0.2-dev"
 dependencies = [
  "base64 0.22.1",
  "core-foundation",
