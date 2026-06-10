@@ -1,5 +1,8 @@
 ---
-const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
+// Link to /releases (all releases) instead of /releases/latest so the
+// page works while we're shipping pre-release dev builds. Latest stable
+// will surface naturally once v0.1.0 ships.
+const releasesUrl = "https://github.com/hiep1987/sniptex/releases";
 ---
 
 <section class="relative overflow-hidden border-b border-ink-200 bg-gradient-to-b from-blue-50 via-white to-white pt-16 pb-20 sm:pt-24 sm:pb-28 dark:border-ink-800 dark:from-ink-900 dark:via-ink-950 dark:to-ink-950">
@@ -23,13 +26,13 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
       </p>
 
       <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <a href={releasesLatest} class="btn-primary">
+        <a href={releasesUrl} class="btn-primary">
           <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
           </svg>
           Download for Mac
         </a>
-        <a href={releasesLatest} class="btn-secondary">
+        <a href={releasesUrl} class="btn-secondary">
           Download for Windows
         </a>
         <a href="#how-it-works" class="text-sm font-medium text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100">

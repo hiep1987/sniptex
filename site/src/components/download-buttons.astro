@@ -1,10 +1,10 @@
 ---
-// Linking to GitHub's `/releases/latest` page rather than a direct
-// `download/<filename>` URL because the asset filename embeds the version
-// tag, which we don't know at build time. Once releases stabilize we can
-// switch to a `/releases/latest/download/<name>` pattern (gh resolves
-// "latest" server-side).
-const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
+// Link to /releases (all releases) instead of /releases/latest so the
+// page works while we're shipping pre-release dev builds — GitHub
+// excludes pre-releases from /latest, which would 404 the buttons until
+// v0.1.0 stable ships. Once v0.1.0 lands we can flip back to
+// /releases/latest/download/<name> for direct deep links.
+const releasesUrl = "https://github.com/hiep1987/sniptex/releases";
 ---
 
 <section id="download" class="border-b border-ink-200 py-16 sm:py-20 dark:border-ink-800">
@@ -32,7 +32,7 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
         <p class="mt-2 text-sm text-ink-500 dark:text-ink-400">
           Apple Silicon · macOS 12+ · ad-hoc signed DMG
         </p>
-        <a href={releasesLatest} class="btn-primary mt-4 w-full">
+        <a href={releasesUrl} class="btn-primary mt-4 w-full">
           Download .dmg
         </a>
         <p class="mt-3 text-[11px] text-ink-500 dark:text-ink-400">
@@ -52,7 +52,7 @@ const releasesLatest = "https://github.com/hiep1987/sniptex/releases/latest";
         <p class="mt-2 text-sm text-ink-500 dark:text-ink-400">
           x64 · Windows 11 · unsigned MSI (SmartScreen workaround needed)
         </p>
-        <a href={releasesLatest} class="btn-primary mt-4 w-full">
+        <a href={releasesUrl} class="btn-primary mt-4 w-full">
           Download .msi
         </a>
         <p class="mt-3 text-[11px] text-ink-500 dark:text-ink-400">
