@@ -17,6 +17,10 @@ export default function AboutTab() {
     if (result.kind === "available") return; // dialog renders below
     if (result.kind === "none") {
       toast.success("You're on the latest version");
+    } else if (result.kind === "no-release") {
+      toast.info("No stable release yet", {
+        description: "Pre-release builds are on GitHub. Stable updates will appear here once published.",
+      });
     } else {
       toast.error("Update check unavailable", { description: result.message });
     }

@@ -129,6 +129,7 @@ export function UpdateDialog({ update, onDismiss }: Props) {
 export type UpdateCheckResult =
   | { kind: "available"; update: Update }
   | { kind: "none" }
+  | { kind: "no-release"; message: string }
   | { kind: "error"; message: string };
 
 // Convenience hook: kick off a check and return a tagged result so callers
@@ -145,7 +146,14 @@ export function useUpdateCheck(autoRunOnMount: boolean) {
       setUpdate(result);
       return result ? { kind: "available", update: result } : { kind: "none" };
     } catch (err) {
-      return { kind: "error", message: String(err) };
+      const message = String(err);
+      // GitHub's /releases/latest/ excludes pre-releases; until a stable
+      // release ships, the endpoint 404s and Tauri's updater surfaces this
+      // exact phrase. Treat as "no stable release yet" rather than a fault.
+      if (message.includes("Could not fetch a valid release JSON")) {
+        return { kind: "no-release", message };
+      }
+      return { kind: "error", message };
     } finally {
       setChecking(false);
       setRanOnce(true);
